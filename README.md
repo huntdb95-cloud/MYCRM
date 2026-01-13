@@ -122,44 +122,66 @@ firebase functions:config:set \
   twilio.webhook_auth="OPTIONAL_WEBHOOK_AUTH_TOKEN"
 ```
 
-Alternatively, you can use environment variables (recommended for production):
+**Important**: The `twilio.webhook_auth` should be set to your Twilio Auth Token (same as `twilio.auth_token`) for webhook signature validation. Alternatively, you can use environment variables:
 
 ```bash
-# Set in .env file or deployment environment
-export TWILIO_ACCOUNT_SID="YOUR_TWILIO_ACCOUNT_SID"
-export TWILIO_AUTH_TOKEN="YOUR_TWILIO_AUTH_TOKEN"
-export TWILIO_WEBHOOK_AUTH="OPTIONAL_WEBHOOK_AUTH_TOKEN"
+# Using Firebase environment variables (recommended)
+firebase functions:config:set twilio.account_sid="ACxxxxx" twilio.auth_token="your_auth_token" twilio.webhook_auth="your_auth_token"
 ```
 
-3. Deploy functions:
+3. Deploy functions and hosting:
 
 ```bash
 cd ..
-firebase deploy --only functions
+firebase deploy --only functions,hosting
 ```
 
-After deployment, note the function URLs:
-- `twilioWebhook`: `https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilioWebhook`
-- `sendSms`: Available as callable function
+### 4. Configure Twilio Webhooks
 
-### 4. Configure Twilio Webhook
+**CRITICAL**: Use your custom domain `bookautomated.com` for webhook URLs. If custom domain is not yet connected, use the Firebase Functions URL format shown below.
+
+#### Option A: Using Custom Domain (bookautomated.com) - RECOMMENDED
 
 1. Go to [Twilio Console](https://console.twilio.com) > Phone Numbers > Manage > Active Numbers
-2. Click on your Twilio phone number
-3. Under "Messaging", set the webhook URL to:
-   ```
-   https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilioWebhook
-   ```
-4. Set HTTP method to `POST`
+2. Click on your Twilio phone number: **(615) 808-8559** (+16158088559)
+3. Configure **Messaging**:
+   - **A MESSAGE COMES IN**: `POST https://bookautomated.com/twilio/sms`
+   - **STATUS CALLBACK URL** (optional): `POST https://bookautomated.com/twilio/status/sms`
+4. Configure **Voice**:
+   - **A CALL COMES IN**: `POST https://bookautomated.com/twilio/voice`
 5. Save the configuration
+
+#### Option B: Using Firebase Functions URL (Fallback)
+
+If custom domain is not yet connected, use these URLs:
+
+1. **Messaging Webhook**: 
+   ```
+   POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/sms
+   ```
+2. **Voice Webhook**: 
+   ```
+   POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/voice
+   ```
+3. **Status Callback** (optional): 
+   ```
+   POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/status/sms
+   ```
+
+**Note**: Replace `YOUR_REGION` and `YOUR_PROJECT` with your actual Firebase project details. You can find these in the Firebase Console > Functions.
 
 ### 5. Configure Twilio Settings in CRM
 
-1. Deploy the app (see next step)
-2. Log in to the CRM
-3. Go to Settings page
-4. Enter your Twilio phone number (E.164 format, e.g., `+1234567890`)
-5. Enter the webhook URL (for reference)
+1. Log in to the CRM
+2. Go to Settings page
+3. Enter your Twilio phone number: `+16158088559`
+4. Configure voice settings (optional):
+   - Forward to number (E.164 format)
+   - Business name: "BookAutomated"
+   - Enable voicemail
+5. Configure SMS settings (optional):
+   - Enable auto-reply
+   - Auto-reply text
 6. Save settings
 
 ### 6. Deploy Hosting
@@ -232,14 +254,30 @@ Then set the Twilio webhook URL to the ngrok URL.
 
 ### 3. SMS Integration
 
-1. Go to Settings and configure Twilio number
-2. Create a customer with a phone number
-3. Go to customer detail page > Messages tab
-4. Send a test SMS message
-5. Verify message appears in thread
-6. Send an SMS from your phone to the Twilio number
-7. Verify the message appears in the CRM under the correct customer
-8. If customer doesn't exist, verify a new "Unknown" lead is created
+1. **Configure Twilio in Settings**:
+   - Go to Settings page
+   - Enter Twilio number: `+16158088559`
+   - Save settings
+
+2. **Test Outbound SMS**:
+   - Create a customer with a phone number
+   - Go to customer detail page > Messages tab
+   - Send a test SMS message
+   - Verify message appears in thread
+   - Check your phone to confirm receipt
+
+3. **Test Inbound SMS**:
+   - Send an SMS from your phone to **(615) 808-8559**
+   - Verify the message appears in the CRM under the correct customer
+   - If customer doesn't exist, verify a new "Unknown" lead is created
+   - Check that conversation is created and linked
+
+4. **Test Voice Call**:
+   - Call **(615) 808-8559**
+   - Test IVR menu (press 1, 2, 3, or 0)
+   - Leave a voicemail
+   - Verify call record is created in Firestore
+   - Verify follow-up task is created for voicemail
 
 ### 4. Tasks
 
@@ -334,6 +372,40 @@ Then set the Twilio webhook URL to the ngrok URL.
 - [ ] Enable Firebase Analytics (optional)
 - [ ] Set up error monitoring (optional)
 
+## Twilio Webhook URLs (IMPORTANT)
+
+**Use these exact URLs in your Twilio Console configuration:**
+
+### Primary URLs (Custom Domain - bookautomated.com)
+
+1. **SMS Inbound Webhook**:
+   ```
+   POST https://bookautomated.com/twilio/sms
+   ```
+   Configure in: Twilio Console > Phone Numbers > (615) 808-8559 > Messaging > "A MESSAGE COMES IN"
+
+2. **Voice Inbound Webhook**:
+   ```
+   POST https://bookautomated.com/twilio/voice
+   ```
+   Configure in: Twilio Console > Phone Numbers > (615) 808-8559 > Voice > "A CALL COMES IN"
+
+3. **SMS Status Callback** (optional):
+   ```
+   POST https://bookautomated.com/twilio/status/sms
+   ```
+   Configure in: Twilio Console > Phone Numbers > (615) 808-8559 > Messaging > "STATUS CALLBACK URL"
+
+### Fallback URLs (If custom domain not connected)
+
+If `bookautomated.com` is not yet connected to Firebase Hosting, use these Firebase Functions URLs:
+
+1. **SMS Inbound**: `POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/sms`
+2. **Voice Inbound**: `POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/voice`
+3. **SMS Status**: `POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/status/sms`
+
+**To find your region and project ID**: Check Firebase Console > Functions > Your function URL
+
 ## Support
 
 For issues or questions:
@@ -341,6 +413,7 @@ For issues or questions:
 2. Check browser console for errors
 3. Review Firestore rules for permission issues
 4. Verify Twilio webhook configuration
+5. Check Functions logs: `firebase functions:log`
 
 ## License
 

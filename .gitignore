@@ -31,5 +31,7 @@ build/
 
 # Secrets (never commit these)
 functions/.env
+functions/.env.*
 **/secrets.json
 **/config.json
+*.log

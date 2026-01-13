@@ -188,6 +188,10 @@ export async function sendSms(customerId, body) {
       throw new Error('Message body is required');
     }
     
+    if (!userStore.agencyId) {
+      throw new Error('No agency context found');
+    }
+    
     const sendSmsFn = getCallable('sendSms');
     const result = await sendSmsFn({
       agencyId: userStore.agencyId,
@@ -203,7 +207,8 @@ export async function sendSms(customerId, body) {
     }
   } catch (error) {
     console.error('Error sending SMS:', error);
-    toast(error.message || 'Failed to send message', 'error');
+    const errorMessage = error.message || 'Failed to send message';
+    toast(errorMessage, 'error');
     throw error;
   }
 }

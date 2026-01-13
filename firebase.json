@@ -21,6 +21,14 @@
     ],
     "rewrites": [
       {
+        "source": "/twilio/**",
+        "function": "twilio"
+      },
+      {
+        "source": "/api/**",
+        "function": "twilio"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
