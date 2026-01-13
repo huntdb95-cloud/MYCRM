@@ -35,3 +35,6 @@ functions/.env.*
 **/secrets.json
 **/config.json
 *.log
+twilio
+*twilio*
+**/twilio*
