@@ -60,6 +60,42 @@ function setupUI() {
   if (btnSaveTwilio) {
     btnSaveTwilio.addEventListener('click', handleSaveTwilio);
   }
+  
+  // Copy webhook URLs
+  const btnCopyInboundSms = document.getElementById('btnCopyInboundSms');
+  if (btnCopyInboundSms) {
+    btnCopyInboundSms.addEventListener('click', () => {
+      const url = document.getElementById('inboundSmsWebhookUrl')?.value || '';
+      copyToClipboard(url, 'Inbound SMS webhook URL copied to clipboard');
+    });
+  }
+  
+  const btnCopyStatusCallback = document.getElementById('btnCopyStatusCallback');
+  if (btnCopyStatusCallback) {
+    btnCopyStatusCallback.addEventListener('click', () => {
+      const url = document.getElementById('statusCallbackUrl')?.value || '';
+      copyToClipboard(url, 'Status callback URL copied to clipboard');
+    });
+  }
+  
+  const btnCopyVoice = document.getElementById('btnCopyVoice');
+  if (btnCopyVoice) {
+    btnCopyVoice.addEventListener('click', () => {
+      const url = document.getElementById('voiceWebhookUrl')?.value || '';
+      copyToClipboard(url, 'Voice webhook URL copied to clipboard');
+    });
+  }
+}
+
+function copyToClipboard(text, successMessage) {
+  if (!text) return;
+  
+  navigator.clipboard.writeText(text).then(() => {
+    toast(successMessage, 'success');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    toast('Failed to copy to clipboard', 'error');
+  });
 }
 
 async function loadSettings() {
@@ -86,13 +122,14 @@ async function loadSettings() {
     if (twilioSnap.exists()) {
       const twilioData = twilioSnap.data();
       const twilioNumber = document.getElementById('twilioNumber');
-      const webhookUrl = document.getElementById('webhookUrl');
       const autoReplyEnabled = document.getElementById('autoReplyEnabled');
       
-      if (twilioNumber) twilioNumber.value = twilioData.twilioNumber || '';
-      if (webhookUrl) webhookUrl.value = twilioData.statusCallbackUrl || '';
+      if (twilioNumber) twilioNumber.value = twilioData.twilioNumber || twilioData.twilioNumberE164 || '';
       if (autoReplyEnabled) autoReplyEnabled.checked = twilioData.autoReplyEnabled || false;
     }
+    
+    // Webhook URLs are read-only and always show the same values
+    // (They're already set in the HTML)
   } catch (error) {
     console.error('Error loading settings:', error);
     toast('Failed to load settings', 'error');
@@ -123,13 +160,12 @@ async function handleSaveProfile() {
 async function handleSaveTwilio() {
   try {
     const twilioNumber = document.getElementById('twilioNumber')?.value.trim();
-    const webhookUrl = document.getElementById('webhookUrl')?.value.trim();
     const autoReplyEnabled = document.getElementById('autoReplyEnabled')?.checked || false;
     
     const twilioRef = doc(db, 'agencies', userStore.agencyId, 'settings', 'twilio');
     await setDoc(twilioRef, {
       twilioNumber: twilioNumber || null,
-      statusCallbackUrl: webhookUrl || null,
+      twilioNumberE164: twilioNumber || null, // Store both for compatibility
       autoReplyEnabled: autoReplyEnabled,
       updatedAt: serverTimestamp(),
     }, { merge: true });

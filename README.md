@@ -383,11 +383,87 @@ When a new user logs in for the first time, the app automatically:
 - [ ] Deploy Storage rules
 - [ ] Deploy Cloud Functions
 - [ ] Set Twilio credentials in Functions config
-- [ ] Configure Twilio webhook URL
+- [ ] Configure Twilio webhook URLs (see Twilio Setup section below)
 - [ ] Test SMS inbound/outbound flow
 - [ ] Set up custom domain (optional)
 - [ ] Enable Firebase Analytics (optional)
 - [ ] Set up error monitoring (optional)
+
+## Twilio Setup (10DLC + Two-Way Texting)
+
+This CRM supports two-way SMS/MMS via Twilio. Follow these steps to configure:
+
+### Firebase Functions Configuration
+
+Set your Twilio credentials in Firebase Functions config:
+
+```bash
+firebase functions:config:set \
+  twilio.account_sid="AC..." \
+  twilio.auth_token="..." \
+  twilio.number="+16158088559"
+```
+
+Then deploy functions:
+
+```bash
+firebase deploy --only functions
+```
+
+**Important:** The `twilio.auth_token` is used for both API calls and webhook signature validation. Do not use a separate webhook auth token.
+
+### Twilio Console Configuration
+
+1. **Log in to Twilio Console**: https://console.twilio.com
+2. **Navigate to Phone Numbers**: Phone Numbers > Manage > Active Numbers
+3. **Select your number**: (615) 808-8559
+4. **Configure Messaging Webhook**:
+   - Go to Messaging section
+   - Set "A MESSAGE COMES IN" to: `POST https://bookautomated.com/twilio/sms`
+   - (Optional) Set "STATUS CALLBACK URL" to: `POST https://bookautomated.com/twilio/status/sms`
+   - Click "Save"
+5. **Configure Voice Webhook** (optional):
+   - Go to Voice section
+   - Set "A CALL COMES IN" to: `POST https://bookautomated.com/twilio/voice`
+   - Click "Save"
+
+**Webhook URLs are also displayed in Settings UI** (`/settings.html`) with copy buttons for easy configuration.
+
+### A2P 10DLC Note for Sole Proprietors
+
+If you're using a US 10DLC number (like +16158088559) for business texting, you typically need to:
+
+1. **Register for A2P 10DLC**: Complete A2P (Application-to-Person) registration in Twilio Console
+2. **Create a Campaign**: Set up a messaging campaign with your business information
+3. **Wait for approval**: Campaign approval can take 1-5 business days
+
+**Important:** This is a high-level overview. For specific requirements, consult Twilio's A2P 10DLC documentation or your Twilio account representative. This is not legal advice.
+
+### Testing Two-Way Texting
+
+1. **Test Inbound SMS**:
+   - Send a text message to your Twilio number: (615) 808-8559
+   - The message should appear in the CRM Inbox (`/inbox.html`)
+   - A new customer lead should be created automatically if the number is unknown
+   - Check Firestore: `agencies/{agencyId}/conversations/{conversationId}/messages`
+
+2. **Test Outbound SMS**:
+   - Open a customer in the CRM (`/customer.html?id={customerId}`)
+   - Go to the Messages tab
+   - Send a test message
+   - Verify the message appears in the conversation
+   - Check message status updates (queued → sent → delivered)
+
+3. **Verify Status Callbacks**:
+   - Check Firestore message docs for status updates
+   - Status should update from "queued" → "sent" → "delivered"
+   - Check Functions logs: `firebase functions:log`
+
+### Webhook Signature Validation
+
+The app validates all Twilio webhooks using signature validation. The validation uses your `twilio.auth_token` (the same token used for API calls). Signature validation is:
+- **Always enabled in production** - Requests without valid signatures are rejected
+- **Skipped in emulator** - For local testing only (when `FUNCTIONS_EMULATOR=true`)
 
 ## Twilio Webhook URLs (IMPORTANT)
 
@@ -422,8 +498,6 @@ If `bookautomated.com` is not yet connected to Firebase Hosting, use these Fireb
 3. **SMS Status**: `POST https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/twilio/twilio/status/sms`
 
 **To find your region and project ID**: Check Firebase Console > Functions > Your function URL
-
-## Troubleshooting Initialization Errors
 
 ## Troubleshooting Initialization Errors
 

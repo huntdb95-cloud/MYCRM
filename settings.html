@@ -66,11 +66,34 @@
             <label class="form-label">Twilio Phone Number (E.164)</label>
             <input type="tel" id="twilioNumber" class="form-input" placeholder="+1234567890" />
           </div>
+          
           <div class="form-group">
-            <label class="form-label">Webhook URL</label>
-            <input type="url" id="webhookUrl" class="form-input" placeholder="https://your-function-url/twilioWebhook" />
-            <small style="color: var(--muted); font-size: 12px;">Set this in your Twilio console</small>
+            <label class="form-label">A Message Comes In (Messaging Webhook)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="url" id="inboundSmsWebhookUrl" class="form-input" value="https://bookautomated.com/twilio/sms" readonly style="flex: 1; background-color: var(--bg-secondary);" />
+              <button class="btn btn-secondary" id="btnCopyInboundSms" style="white-space: nowrap;">Copy</button>
+            </div>
+            <small style="color: var(--muted); font-size: 12px;">Paste this URL into Twilio Console > Phone Numbers > Your Number > Messaging > "A MESSAGE COMES IN"</small>
           </div>
+          
+          <div class="form-group">
+            <label class="form-label">Status Callback URL</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="url" id="statusCallbackUrl" class="form-input" value="https://bookautomated.com/twilio/status/sms" readonly style="flex: 1; background-color: var(--bg-secondary);" />
+              <button class="btn btn-secondary" id="btnCopyStatusCallback" style="white-space: nowrap;">Copy</button>
+            </div>
+            <small style="color: var(--muted); font-size: 12px;">Paste this URL into Twilio Console > Phone Numbers > Your Number > Messaging > "STATUS CALLBACK URL" (optional)</small>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">A Call Comes In (Voice Webhook)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="url" id="voiceWebhookUrl" class="form-input" value="https://bookautomated.com/twilio/voice" readonly style="flex: 1; background-color: var(--bg-secondary);" />
+              <button class="btn btn-secondary" id="btnCopyVoice" style="white-space: nowrap;">Copy</button>
+            </div>
+            <small style="color: var(--muted); font-size: 12px;">Paste this URL into Twilio Console > Phone Numbers > Your Number > Voice > "A CALL COMES IN" (optional)</small>
+          </div>
+          
           <div class="form-group">
             <label class="form-label">
               <input type="checkbox" id="autoReplyEnabled" style="margin-right: 8px;" />

@@ -17,9 +17,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Get Twilio credentials from environment
+// Standardized config keys: twilio.account_sid, twilio.auth_token, twilio.number
 const TWILIO_ACCOUNT_SID = functions.config().twilio?.account_sid || process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = functions.config().twilio?.auth_token || process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_WEBHOOK_AUTH = functions.config().twilio?.webhook_auth || process.env.TWILIO_WEBHOOK_AUTH;
+const TWILIO_NUMBER = functions.config().twilio?.number || process.env.TWILIO_NUMBER || '+16158088559';
+
+// Check if running in emulator
+const IS_EMULATOR = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIREBASE_EMULATOR_HUB;
 
 // Initialize Twilio client
 let twilioClient = null;
@@ -54,34 +58,63 @@ function normalizePhoneToE164(phone) {
 
 /**
  * Validate Twilio webhook signature
+ * Uses TWILIO_AUTH_TOKEN for signature validation (same token used for API calls)
+ * Handles Firebase Hosting rewrites by using bookautomated.com domain
  */
 function validateTwilioSignature(req, res, next) {
-  if (!TWILIO_WEBHOOK_AUTH) {
-    console.warn('Twilio webhook auth not configured, skipping signature validation');
+  // Skip validation only in emulator (for local testing)
+  if (IS_EMULATOR && !TWILIO_AUTH_TOKEN) {
+    console.warn('[EMULATOR] Twilio auth token not configured, skipping signature validation');
     return next();
   }
   
-  const signature = req.headers['x-twilio-signature'];
-  const url = req.protocol + '://' + req.get('host') + req.originalUrl;
+  // In production, require auth token
+  if (!TWILIO_AUTH_TOKEN) {
+    console.error('Twilio auth token not configured - rejecting request');
+    return res.status(500).send('Twilio auth token not configured');
+  }
   
+  const signature = req.headers['x-twilio-signature'];
   if (!signature) {
-    console.warn('Missing Twilio signature');
+    console.warn('Missing Twilio signature header');
     return res.status(403).send('Forbidden');
   }
   
+  // Build URL for signature validation
+  // Handle Firebase Hosting rewrites - use bookautomated.com when deployed
+  let host = req.get('host');
+  let protocol = req.protocol;
+  
+  // Honor x-forwarded-proto header if present (Firebase Hosting sets this)
+  const forwardedProto = req.get('x-forwarded-proto');
+  if (forwardedProto) {
+    protocol = forwardedProto;
+  }
+  
+  // Force https for bookautomated.com (even if proxy shows http)
+  if (host && (host.includes('bookautomated.com') || host.includes('bookautomated'))) {
+    protocol = 'https';
+  }
+  
+  const url = protocol + '://' + host + req.originalUrl;
+  
+  // Log validation attempt (sanity check)
+  console.log('Validating Twilio signature for:', url);
+  
   const params = req.body;
   const isValid = twilio.validateRequest(
-    TWILIO_WEBHOOK_AUTH,
+    TWILIO_AUTH_TOKEN,
     signature,
     url,
     params
   );
   
   if (!isValid) {
-    console.warn('Invalid Twilio signature');
+    console.warn('Invalid Twilio signature - rejecting request');
     return res.status(403).send('Forbidden');
   }
   
+  console.log('Twilio signature validated successfully');
   next();
 }
 
@@ -220,15 +253,16 @@ async function getOrCreateConversation(agencyId, customerId, phoneE164, twilioNu
 
 /**
  * Get Twilio settings for agency
+ * Uses TWILIO_NUMBER from functions config as fallback if not in Firestore
  */
 async function getTwilioSettings(agencyId) {
   const settingsRef = db.collection('agencies').doc(agencyId).collection('settings').doc('twilio');
   const settingsSnap = await settingsRef.get();
   
   if (!settingsSnap.exists) {
-    // Return defaults
+    // Return defaults using config value
     return {
-      twilioNumberE164: '+16158088559',
+      twilioNumberE164: TWILIO_NUMBER,
       voice: {
         forwardToE164: null,
         voicemailEnabled: true,
@@ -241,7 +275,13 @@ async function getTwilioSettings(agencyId) {
     };
   }
   
-  return settingsSnap.data();
+  const settings = settingsSnap.data();
+  // Use config value as fallback if not in Firestore
+  if (!settings.twilioNumberE164) {
+    settings.twilioNumberE164 = TWILIO_NUMBER;
+  }
+  
+  return settings;
 }
 
 // ============================================================================
@@ -292,6 +332,16 @@ app.post('/twilio/sms', validateTwilioSignature, async (req, res) => {
     // Get or create conversation
     const conversation = await getOrCreateConversation(agencyId, customer.id, fromE164, toE164);
     
+    // Handle MMS media URLs (MediaUrl0, MediaUrl1, etc.)
+    const mediaUrls = [];
+    const numMedia = parseInt(req.body.NumMedia || '0', 10);
+    for (let i = 0; i < numMedia; i++) {
+      const mediaUrl = req.body[`MediaUrl${i}`];
+      if (mediaUrl) {
+        mediaUrls.push(mediaUrl);
+      }
+    }
+    
     // Add message to conversation
     const messagesRef = db.collection('agencies').doc(agencyId)
       .collection('conversations').doc(conversation.id)
@@ -305,6 +355,7 @@ app.post('/twilio/sms', validateTwilioSignature, async (req, res) => {
       toE164: toE164,
       status: 'received',
       twilioSid: messageSid,
+      mediaUrls: mediaUrls.length > 0 ? mediaUrls : null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     
