@@ -12,6 +12,13 @@ let customers = [];
 
 async function init() {
   try {
+    console.log('[customers-page.js] Initializing...');
+    
+    // Verify Firebase services
+    if (!auth || !db) {
+      throw new Error('Firebase services not initialized. Check firebase.js for errors.');
+    }
+    
     await initAuthGuard();
     initRouter();
     setupUI();
@@ -21,9 +28,13 @@ async function init() {
     if (getUrlParam('action') === 'new') {
       openCustomerModal();
     }
+    
+    console.log('[customers-page.js] Initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize:', error);
-    toast('Failed to initialize page', 'error');
+    console.error('[customers-page.js] Failed to initialize:', error);
+    console.error('[customers-page.js] Error stack:', error.stack);
+    const errorMessage = error?.message || String(error);
+    toast(`Failed to initialize: ${errorMessage}`, 'error');
   }
 }
 

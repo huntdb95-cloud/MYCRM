@@ -17,6 +17,13 @@ import {
 // Initialize
 async function init() {
   try {
+    console.log('[app.js] Initializing dashboard...');
+    
+    // Verify Firebase services
+    if (!auth || !db) {
+      throw new Error('Firebase services not initialized. Check firebase.js for errors.');
+    }
+    
     // Wait for auth guard (handles redirect if not logged in)
     await initAuthGuard();
     
@@ -25,9 +32,13 @@ async function init() {
     
     // Load dashboard data
     await loadDashboard();
+    
+    console.log('[app.js] Dashboard initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize app:', error);
-    showError('Failed to initialize dashboard');
+    console.error('[app.js] Failed to initialize app:', error);
+    console.error('[app.js] Error stack:', error.stack);
+    const errorMessage = error?.message || String(error);
+    showError(`Failed to initialize dashboard: ${errorMessage}`);
   }
 }
 
@@ -506,14 +517,31 @@ function formatDateTime(timestamp) {
 function showError(message) {
   const pageContent = document.getElementById('pageContent');
   if (pageContent) {
+    const errorDetails = message || 'Unknown error occurred';
     pageContent.innerHTML = `
       <div class="card" style="text-align: center; padding: 40px;">
-        <h3 style="color: var(--danger);">Error</h3>
-        <p>${message}</p>
-        <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+        <h3 style="color: var(--danger); margin-bottom: 16px;">⚠️ Initialization Error</h3>
+        <p style="margin-bottom: 20px; color: var(--text);">${escapeHtml(errorDetails)}</p>
+        <div style="margin-bottom: 20px; padding: 16px; background: rgba(251, 113, 133, 0.1); border-radius: 8px; text-align: left;">
+          <strong style="color: var(--danger);">Common causes:</strong>
+          <ul style="margin: 8px 0 0 20px; color: var(--muted);">
+            <li>Firebase services not initialized (check console)</li>
+            <li>Network connectivity issues</li>
+            <li>Firestore rules blocking access</li>
+            <li>User authentication failed</li>
+          </ul>
+        </div>
+        <button class="btn btn-primary" onclick="window.location.reload()" style="margin-right: 12px;">Retry</button>
+        <button class="btn" onclick="window.location.href='/index.html'">Go to Login</button>
       </div>
     `;
   }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // Initialize on load

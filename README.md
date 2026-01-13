@@ -406,14 +406,69 @@ If `bookautomated.com` is not yet connected to Firebase Hosting, use these Fireb
 
 **To find your region and project ID**: Check Firebase Console > Functions > Your function URL
 
+## Troubleshooting Initialization Errors
+
+If you see an "Initialization Error" banner or "Failed to initialize" message, check these 3 common causes:
+
+### 1. Firebase Services Not Initialized
+
+**Symptoms:**
+- Error banner shows "Firebase services not initialized"
+- Debug panel shows ✗ for Auth/Firestore
+- Console shows errors from `firebase.js`
+
+**Solutions:**
+- Check browser console for detailed error messages
+- Verify Firebase config in `js/firebase.js` is correct
+- Ensure you're not running from `file://` protocol (use `localhost` or deploy to hosting)
+- Check network connectivity (Firebase requires internet connection)
+- Verify Firebase project is active in Firebase Console
+
+### 2. Running from file:// Protocol
+
+**Symptoms:**
+- Debug panel shows Protocol: `file:`
+- Warning message about file:// protocol
+- Firebase requests fail with CORS errors
+
+**Solutions:**
+- Use a local server: `python -m http.server 8000` or `npx serve`
+- Access via `http://localhost:8000` instead of opening HTML file directly
+- Deploy to Firebase Hosting for production
+
+### 3. Network or CORS Issues
+
+**Symptoms:**
+- Console shows CORS errors
+- Firebase requests timing out
+- "Network error" messages
+
+**Solutions:**
+- Check internet connection
+- Verify Firebase project is not paused
+- Check browser console for blocked requests
+- Try disabling browser extensions that might block requests
+- Verify Firebase domain is whitelisted in your network/firewall
+
+### Debug Panel
+
+The debug panel (shown in development) displays:
+- Current URL and protocol
+- Firebase project ID
+- Status of each Firebase service (Auth, Firestore, Storage, Functions, Analytics)
+- Error count
+
+To view detailed errors, check the browser console (F12) for messages prefixed with `[firebase.js]`, `[index.js]`, or `[app.js]`.
+
 ## Support
 
 For issues or questions:
 1. Check Firebase Console logs
-2. Check browser console for errors
+2. Check browser console for errors (look for `[firebase.js]`, `[index.js]` prefixes)
 3. Review Firestore rules for permission issues
 4. Verify Twilio webhook configuration
 5. Check Functions logs: `firebase functions:log`
+6. Use the debug panel (visible in development mode) to check service status
 
 ## License
 

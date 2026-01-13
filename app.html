@@ -196,6 +196,22 @@
     </nav>
   </div>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module">
+    console.log('[app.html] Loading app.js module...');
+    import('./js/app.js').catch(error => {
+      console.error('[app.html] Failed to load app.js:', error);
+      const pageContent = document.getElementById('pageContent');
+      if (pageContent) {
+        pageContent.innerHTML = `
+          <div class="card" style="text-align: center; padding: 40px;">
+            <h3 style="color: var(--danger);">Failed to Load Application</h3>
+            <p>${error.message || error}</p>
+            <p style="color: var(--muted); font-size: 12px; margin-top: 16px;">Check browser console (F12) for details</p>
+            <button class="btn btn-primary" onclick="window.location.reload()" style="margin-top: 20px;">Reload</button>
+          </div>
+        `;
+      }
+    });
+  </script>
 </body>
 </html>

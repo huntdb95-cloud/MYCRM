@@ -19,6 +19,13 @@ let conversationId = null;
 
 async function init() {
   try {
+    console.log('[customer-page.js] Initializing...');
+    
+    // Verify Firebase services
+    if (!auth || !db) {
+      throw new Error('Firebase services not initialized. Check firebase.js for errors.');
+    }
+    
     customerId = getUrlParam('id');
     if (!customerId) {
       toast('Customer ID required', 'error');
@@ -36,9 +43,13 @@ async function init() {
     if (hash) {
       switchTab(hash);
     }
+    
+    console.log('[customer-page.js] Initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize:', error);
-    toast('Failed to initialize page', 'error');
+    console.error('[customer-page.js] Failed to initialize:', error);
+    console.error('[customer-page.js] Error stack:', error.stack);
+    const errorMessage = error?.message || String(error);
+    toast(`Failed to initialize: ${errorMessage}`, 'error');
   }
 }
 

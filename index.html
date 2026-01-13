@@ -233,6 +233,18 @@
   </script>
 
   <!-- Your app logic -->
-  <script type="module" src="./index.js"></script>
+  <script type="module">
+    console.log('[index.html] Loading index.js module...');
+    import('./index.js').catch(error => {
+      console.error('[index.html] Failed to load index.js:', error);
+      const banner = document.createElement('div');
+      banner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #dc2626; color: white; padding: 20px; z-index: 10000; text-align: center;';
+      banner.innerHTML = `
+        <strong>Failed to load application:</strong> ${error.message || error}
+        <br/><small>Check browser console (F12) for details</small>
+      `;
+      document.body.insertBefore(banner, document.body.firstChild);
+    });
+  </script>
 </body>
 </html>
