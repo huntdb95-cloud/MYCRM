@@ -349,10 +349,27 @@ Then set the Twilio webhook URL to the ngrok URL.
 - Check function logs: `firebase functions:log`
 - Verify Twilio credentials are set correctly
 
-### Firestore permission errors
-- Check Firestore rules are deployed: `firebase deploy --only firestore:rules`
-- Verify user is authenticated and belongs to agency
-- Check user role has required permissions
+### Firestore permission errors ("Missing or insufficient permissions")
+
+**First-time login bootstrap:**
+When a new user logs in for the first time, the app automatically:
+1. Creates a "Default Agency" 
+2. Adds the user as an admin member
+3. Creates a userContext pointer for fast lookup
+
+**If you see permission errors:**
+- Check browser console for detailed error messages (look for `[auth-guard.js]` logs)
+- Verify Firestore rules are deployed: `firebase deploy --only firestore:rules`
+- Ensure you're logged in (check Firebase Auth)
+- Try logging out and logging back in to trigger bootstrap again
+- Check that Firestore rules allow creating agencies with `createdByUid` field
+- Verify rules allow creating membership docs at `agencies/{agencyId}/users/{uid}`
+
+**Common causes:**
+- Firestore rules not deployed or outdated
+- Network connectivity issues  
+- Firebase project paused or billing issues
+- Rules don't allow bootstrap operations
 
 ### Phone number normalization issues
 - Ensure phone numbers are in valid format
@@ -408,7 +425,9 @@ If `bookautomated.com` is not yet connected to Firebase Hosting, use these Fireb
 
 ## Troubleshooting Initialization Errors
 
-If you see an "Initialization Error" banner or "Failed to initialize" message, check these 3 common causes:
+## Troubleshooting Initialization Errors
+
+If you see an "Initialization Error" banner or "Failed to initialize" message, check these common causes:
 
 ### 1. Firebase Services Not Initialized
 

@@ -180,11 +180,21 @@ try {
   }
   
   // Initialize Analytics (non-critical, wrap in try/catch)
+  // Analytics can be blocked by ad blockers (ERR_BLOCKED_BY_CLIENT)
   try {
     initializationState.analytics = getAnalytics(initializationState.app);
     console.log('[firebase.js] ✓ Analytics initialized');
   } catch (analyticsError) {
-    console.warn('[firebase.js] Analytics initialization failed (non-critical):', analyticsError);
+    // Check if blocked by client (ad blocker)
+    const isBlocked = analyticsError.message?.includes('blocked') || 
+                      analyticsError.message?.includes('gtag') ||
+                      analyticsError.code === 'ERR_BLOCKED_BY_CLIENT';
+    
+    if (isBlocked) {
+      console.warn('[firebase.js] Analytics blocked by client (ad blocker); continuing.');
+    } else {
+      console.warn('[firebase.js] Analytics initialization failed (non-critical):', analyticsError);
+    }
     initializationState.errors.push({ type: 'analytics', error: analyticsError });
   }
   

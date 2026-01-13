@@ -2,7 +2,7 @@
 
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { doc, getDoc, collection, query, where, getDocs, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { doc, getDoc, setDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 // Global user context store
 export const userStore = {
@@ -51,6 +51,8 @@ export async function initAuthGuard() {
           } catch (error) {
             console.error('[auth-guard.js] Failed to load user context:', error);
             console.error('[auth-guard.js] Error stack:', error.stack);
+            console.error('[auth-guard.js] Error code:', error.code);
+            console.error('[auth-guard.js] Error message:', error.message);
             reject(error);
           }
         } catch (callbackError) {
@@ -71,6 +73,16 @@ export async function initAuthGuard() {
 
 /**
  * Load user context (agency, role, etc.)
+ * Uses deterministic userContext/{uid} pointer for fast lookup
+ * 
+ * Firestore reads performed:
+ * 1. /userContext/{uid} - to get agencyId pointer
+ * 2. /agencies/{agencyId}/users/{uid} - to get role and profile
+ * 
+ * If userContext doesn't exist, bootstrap creates:
+ * - /agencies/{newAgencyId} - new agency doc
+ * - /agencies/{newAgencyId}/users/{uid} - membership doc
+ * - /userContext/{uid} - pointer to agencyId
  */
 async function loadUserContext(user) {
   if (!db) {
@@ -81,70 +93,153 @@ async function loadUserContext(user) {
   userStore.email = user.email;
   
   try {
-    // First, try to find user in any agency
-    const usersRef = collection(db, 'agencies');
-    const agenciesSnapshot = await getDocs(usersRef);
+    // STEP 1: Try to read userContext pointer (deterministic, no query needed)
+    console.log('[auth-guard.js] Reading userContext for uid:', user.uid);
+    const userContextRef = doc(db, 'userContext', user.uid);
+    let userContextSnap;
     
-    let foundAgency = null;
-    let userDoc = null;
-    
-    for (const agencyDoc of agenciesSnapshot.docs) {
-      const userRef = doc(db, 'agencies', agencyDoc.id, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      
-      if (userSnap.exists()) {
-        foundAgency = agencyDoc.id;
-        userDoc = userSnap.data();
-        break;
-      }
+    try {
+      userContextSnap = await getDoc(userContextRef);
+      console.log('[auth-guard.js] userContext read result:', userContextSnap.exists() ? 'exists' : 'not found');
+    } catch (contextError) {
+      console.error('[auth-guard.js] Failed to read userContext:', contextError);
+      console.error('[auth-guard.js] Path attempted: userContext/' + user.uid);
+      throw new Error(`Failed to read userContext: ${contextError.message}`);
     }
     
-    // If no agency found, create default agency and add user as admin
-    if (!foundAgency) {
-      foundAgency = await createDefaultAgency(user);
-      const userRef = doc(db, 'agencies', foundAgency, 'users', user.uid);
-      userDoc = (await getDoc(userRef)).data();
+    let agencyId = null;
+    
+    if (userContextSnap.exists()) {
+      // User has a context - get agencyId
+      const contextData = userContextSnap.data();
+      agencyId = contextData.agencyId;
+      console.log('[auth-guard.js] Found agencyId from userContext:', agencyId);
+    } else {
+      // STEP 2: Bootstrap - create default agency and membership
+      console.log('[auth-guard.js] No userContext found, bootstrapping...');
+      agencyId = await bootstrapUserAgency(user);
     }
     
-    userStore.agencyId = foundAgency;
-    userStore.role = userDoc?.role || 'agent';
-    userStore.displayName = userDoc?.displayName || user.email?.split('@')[0] || 'User';
+    if (!agencyId) {
+      throw new Error('Failed to determine agencyId');
+    }
+    
+    // STEP 3: Read membership doc to get role and profile
+    console.log('[auth-guard.js] Reading membership doc: agencies/' + agencyId + '/users/' + user.uid);
+    const membershipRef = doc(db, 'agencies', agencyId, 'users', user.uid);
+    let membershipSnap;
+    
+    try {
+      membershipSnap = await getDoc(membershipRef);
+      console.log('[auth-guard.js] Membership read result:', membershipSnap.exists() ? 'exists' : 'not found');
+    } catch (membershipError) {
+      console.error('[auth-guard.js] Failed to read membership doc:', membershipError);
+      console.error('[auth-guard.js] Path attempted: agencies/' + agencyId + '/users/' + user.uid);
+      throw new Error(`Failed to read membership: ${membershipError.message}`);
+    }
+    
+    if (!membershipSnap.exists()) {
+      throw new Error(`Membership doc not found for agency ${agencyId}. Bootstrap may have failed.`);
+    }
+    
+    const membershipData = membershipSnap.data();
+    userStore.agencyId = agencyId;
+    userStore.role = membershipData.role || 'agent';
+    userStore.displayName = membershipData.displayName || user.email?.split('@')[0] || 'User';
+    
+    console.log('[auth-guard.js] User context loaded:', {
+      agencyId: userStore.agencyId,
+      role: userStore.role,
+      displayName: userStore.displayName
+    });
+    
   } catch (error) {
     console.error('[auth-guard.js] Error loading user context:', error);
+    console.error('[auth-guard.js] Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
     throw error;
   }
 }
 
 /**
- * Create default agency for new user
+ * Bootstrap: Create default agency and membership for new user
+ * Creates:
+ * 1. /agencies/{newAgencyId} with createdByUid = user.uid
+ * 2. /agencies/{newAgencyId}/users/{user.uid} with role="admin"
+ * 3. /userContext/{user.uid} pointing to agencyId
  */
-async function createDefaultAgency(user) {
+async function bootstrapUserAgency(user) {
   if (!db) {
     throw new Error('Firestore not initialized');
   }
   
   try {
+    console.log('[auth-guard.js] Creating default agency for user:', user.uid);
+    
+    // STEP 1: Create agency doc
     const agencyRef = doc(collection(db, 'agencies'));
     const agencyId = agencyRef.id;
     
-    await setDoc(agencyRef, {
-      name: 'Default Agency',
-      createdAt: serverTimestamp(),
-    });
+    console.log('[auth-guard.js] Creating agency doc: agencies/' + agencyId);
+    try {
+      await setDoc(agencyRef, {
+        name: 'Default Agency',
+        createdByUid: user.uid, // Required by rules
+        isDefault: true,
+        createdAt: serverTimestamp(),
+      });
+      console.log('[auth-guard.js] ✓ Agency doc created');
+    } catch (agencyError) {
+      console.error('[auth-guard.js] Failed to create agency doc:', agencyError);
+      console.error('[auth-guard.js] Path attempted: agencies/' + agencyId);
+      throw new Error(`Failed to create agency: ${agencyError.message}`);
+    }
     
-    // Add user as admin
-    const userRef = doc(db, 'agencies', agencyId, 'users', user.uid);
-    await setDoc(userRef, {
-      role: 'admin',
-      displayName: user.displayName || user.email?.split('@')[0] || 'Admin',
-      email: user.email,
-      phone: null,
-      createdAt: serverTimestamp(),
-    });
+    // STEP 2: Create membership doc
+    const membershipRef = doc(db, 'agencies', agencyId, 'users', user.uid);
     
+    console.log('[auth-guard.js] Creating membership doc: agencies/' + agencyId + '/users/' + user.uid);
+    try {
+      await setDoc(membershipRef, {
+        role: 'admin',
+        displayName: user.displayName || user.email?.split('@')[0] || 'Admin',
+        email: user.email,
+        phone: null,
+        createdAt: serverTimestamp(),
+      });
+      console.log('[auth-guard.js] ✓ Membership doc created');
+    } catch (membershipError) {
+      console.error('[auth-guard.js] Failed to create membership doc:', membershipError);
+      console.error('[auth-guard.js] Path attempted: agencies/' + agencyId + '/users/' + user.uid);
+      throw new Error(`Failed to create membership: ${membershipError.message}`);
+    }
+    
+    // STEP 3: Create userContext pointer
+    const userContextRef = doc(db, 'userContext', user.uid);
+    
+    console.log('[auth-guard.js] Creating userContext pointer: userContext/' + user.uid);
+    try {
+      await setDoc(userContextRef, {
+        agencyId: agencyId,
+        role: 'admin',
+        createdAt: serverTimestamp(),
+      });
+      console.log('[auth-guard.js] ✓ UserContext pointer created');
+    } catch (contextError) {
+      console.error('[auth-guard.js] Failed to create userContext:', contextError);
+      console.error('[auth-guard.js] Path attempted: userContext/' + user.uid);
+      // Non-fatal - we can still proceed with agencyId
+      console.warn('[auth-guard.js] Continuing without userContext pointer');
+    }
+    
+    console.log('[auth-guard.js] Bootstrap complete, agencyId:', agencyId);
     return agencyId;
+    
   } catch (error) {
-    console.error('[auth-guard.js] Error creating default agency:', error);
+    console.error('[auth-guard.js] Error in bootstrapUserAgency:', error);
     throw error;
   }
 }
