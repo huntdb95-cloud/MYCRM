@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MYCRM - Customer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>MYCRM</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/app.html" class="nav-link" data-nav><span class="icon">📊</span><span>Dashboard</span></a>
+        <a href="/customers.html" class="nav-link" data-nav><span class="icon">👥</span><span>Customers</span></a>
+        <a href="/inbox.html" class="nav-link" data-nav><span class="icon">💬</span><span>Inbox</span></a>
+        <a href="/tasks.html" class="nav-link" data-nav><span class="icon">✓</span><span>Tasks</span></a>
+        <a href="/settings.html" class="nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info" id="userInfo">
+          <div class="user-name" id="userName">Loading...</div>
+          <div class="user-role" id="userRole">—</div>
+        </div>
+        <button class="btn btn-text" id="btnLogout">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon mobile-only" id="btnMenuToggle">☰</button>
+          <a href="/customers.html" style="color: var(--muted); text-decoration: none; margin-right: 12px;">← Back</a>
+          <h1 class="page-title" id="customerName">Loading...</h1>
+        </div>
+        <div class="top-bar-right">
+          <button class="btn" id="btnEdit">Edit</button>
+        </div>
+      </header>
+
+      <div class="page-content">
+        <div class="card" style="margin-bottom: 24px;">
+          <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Phone</div>
+              <div id="customerPhone">—</div>
+            </div>
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Email</div>
+              <div id="customerEmail">—</div>
+            </div>
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Status</div>
+              <div><span class="badge badge-info" id="customerStatus">—</span></div>
+            </div>
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Last Contact</div>
+              <div id="lastContact">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="overview">Overview</button>
+          <button class="tab" data-tab="messages">Messages</button>
+          <button class="tab" data-tab="policies">Policies</button>
+          <button class="tab" data-tab="notes">Notes</button>
+          <button class="tab" data-tab="tasks">Tasks</button>
+          <button class="tab" data-tab="documents">Documents</button>
+        </div>
+
+        <div class="tab-content active" id="tabOverview">
+          <div class="card">
+            <h3>Customer Information</h3>
+            <div id="customerDetails">Loading...</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabMessages">
+          <div class="card">
+            <h3>Messages</h3>
+            <div class="message-thread" id="messageThread">Loading...</div>
+            <div class="message-compose">
+              <input type="text" id="messageInput" placeholder="Type a message..." />
+              <button class="btn btn-primary" id="btnSendMessage">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabPolicies">
+          <div class="card">
+            <h3>Policies</h3>
+            <button class="btn btn-primary" id="btnNewPolicy" style="margin-bottom: 16px;">+ Add Policy</button>
+            <div id="policiesList">No policies</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabNotes">
+          <div class="card">
+            <h3>Notes</h3>
+            <div class="message-compose" style="margin-bottom: 16px;">
+              <textarea id="noteInput" class="form-textarea" placeholder="Add a note..." style="min-height: 80px;"></textarea>
+              <button class="btn btn-primary" id="btnAddNote">Add Note</button>
+            </div>
+            <div id="notesList">Loading...</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabTasks">
+          <div class="card">
+            <h3>Tasks</h3>
+            <button class="btn btn-primary" id="btnNewTask" style="margin-bottom: 16px;">+ New Task</button>
+            <div id="tasksList">Loading...</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tabDocuments">
+          <div class="card">
+            <h3>Documents</h3>
+            <input type="file" id="fileInput" style="display: none;" />
+            <button class="btn btn-primary" id="btnUpload" style="margin-bottom: 16px;">+ Upload Document</button>
+            <div id="documentsList">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="bottom-nav mobile-only">
+      <a href="/app.html" class="bottom-nav-link" data-nav><span class="icon">📊</span><span>Dashboard</span></a>
+      <a href="/customers.html" class="bottom-nav-link active" data-nav><span class="icon">👥</span><span>Customers</span></a>
+      <a href="/inbox.html" class="bottom-nav-link" data-nav><span class="icon">💬</span><span>Inbox</span></a>
+      <a href="/tasks.html" class="bottom-nav-link" data-nav><span class="icon">✓</span><span>Tasks</span></a>
+      <a href="/settings.html" class="bottom-nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
+    </nav>
+  </div>
+
+  <script type="module" src="js/customer-page.js"></script>
+</body>
+</html>

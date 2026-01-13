@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MYCRM - Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation (Desktop) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>MYCRM</div>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="/app.html" class="nav-link" data-nav>
+          <span class="icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="/customers.html" class="nav-link" data-nav>
+          <span class="icon">👥</span>
+          <span>Customers</span>
+        </a>
+        <a href="/inbox.html" class="nav-link" data-nav>
+          <span class="icon">💬</span>
+          <span>Inbox</span>
+        </a>
+        <a href="/tasks.html" class="nav-link" data-nav>
+          <span class="icon">✓</span>
+          <span>Tasks</span>
+        </a>
+        <a href="/settings.html" class="nav-link" data-nav>
+          <span class="icon">⚙️</span>
+          <span>Settings</span>
+        </a>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="user-info" id="userInfo">
+          <div class="user-name" id="userName">Loading...</div>
+          <div class="user-role" id="userRole">—</div>
+        </div>
+        <button class="btn btn-text" id="btnLogout">Log out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon mobile-only" id="btnMenuToggle">☰</button>
+          <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="search-box">
+            <input type="text" id="globalSearch" placeholder="Search customers, messages..." />
+            <span class="search-icon">🔍</span>
+          </div>
+          <button class="btn btn-primary" id="btnNewCustomer">+ New Customer</button>
+          <button class="btn btn-primary" id="btnNewTask">+ New Task</button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="page-content" id="pageContent">
+        <div class="dashboard-grid">
+          <div class="dashboard-card">
+            <h3>Recent Customers</h3>
+            <div id="recentCustomers">Loading...</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Recent Messages</h3>
+            <div id="recentMessages">Loading...</div>
+          </div>
+          <div class="dashboard-card">
+            <h3>Upcoming Tasks</h3>
+            <div id="upcomingTasks">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav class="bottom-nav mobile-only">
+      <a href="/app.html" class="bottom-nav-link" data-nav>
+        <span class="icon">📊</span>
+        <span>Dashboard</span>
+      </a>
+      <a href="/customers.html" class="bottom-nav-link" data-nav>
+        <span class="icon">👥</span>
+        <span>Customers</span>
+      </a>
+      <a href="/inbox.html" class="bottom-nav-link" data-nav>
+        <span class="icon">💬</span>
+        <span>Inbox</span>
+      </a>
+      <a href="/tasks.html" class="bottom-nav-link" data-nav>
+        <span class="icon">✓</span>
+        <span>Tasks</span>
+      </a>
+      <a href="/settings.html" class="bottom-nav-link" data-nav>
+        <span class="icon">⚙️</span>
+        <span>Settings</span>
+      </a>
+    </nav>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

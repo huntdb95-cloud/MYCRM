@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MYCRM - Inbox</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>MYCRM</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/app.html" class="nav-link" data-nav><span class="icon">📊</span><span>Dashboard</span></a>
+        <a href="/customers.html" class="nav-link" data-nav><span class="icon">👥</span><span>Customers</span></a>
+        <a href="/inbox.html" class="nav-link active" data-nav><span class="icon">💬</span><span>Inbox</span></a>
+        <a href="/tasks.html" class="nav-link" data-nav><span class="icon">✓</span><span>Tasks</span></a>
+        <a href="/settings.html" class="nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info" id="userInfo">
+          <div class="user-name" id="userName">Loading...</div>
+          <div class="user-role" id="userRole">—</div>
+        </div>
+        <button class="btn btn-text" id="btnLogout">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon mobile-only" id="btnMenuToggle">☰</button>
+          <h1 class="page-title">Inbox</h1>
+        </div>
+        <div class="top-bar-right">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search conversations..." />
+            <span class="search-icon">🔍</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="page-content">
+        <div class="card">
+          <div id="conversationsList">Loading...</div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="bottom-nav mobile-only">
+      <a href="/app.html" class="bottom-nav-link" data-nav><span class="icon">📊</span><span>Dashboard</span></a>
+      <a href="/customers.html" class="bottom-nav-link" data-nav><span class="icon">👥</span><span>Customers</span></a>
+      <a href="/inbox.html" class="bottom-nav-link active" data-nav><span class="icon">💬</span><span>Inbox</span></a>
+      <a href="/tasks.html" class="bottom-nav-link" data-nav><span class="icon">✓</span><span>Tasks</span></a>
+      <a href="/settings.html" class="bottom-nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
+    </nav>
+  </div>
+
+  <script type="module" src="js/inbox-page.js"></script>
+</body>
+</html>

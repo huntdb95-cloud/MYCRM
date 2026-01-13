@@ -165,10 +165,8 @@ ui.btnLogout.addEventListener("click", async () => {
 });
 
 // ======= DASHBOARD BUTTON =======
-// You can change this to your real app page later (app.html, dashboard.html, etc.)
 ui.btnGoDashboard.addEventListener("click", () => {
-  // Example: location.href = "/app.html";
-  ui.statusAuthed.textContent = "Dashboard not created yet. Create app.html and redirect here.";
+  window.location.href = "/app.html";
 });
 
 // ======= AUTH STATE LISTENER =======
@@ -181,6 +179,13 @@ onAuthStateChanged(auth, async (user) => {
   try {
     await ensureUserProfile(user);
     showSignedIn(user);
+    
+    // Auto-redirect to app if on index page
+    if (window.location.pathname === '/index.html' || window.location.pathname === '/') {
+      setTimeout(() => {
+        window.location.href = "/app.html";
+      }, 1000);
+    }
   } catch (e) {
     showSignedIn(user);
     ui.statusAuthed.textContent = `Signed in, but profile doc update failed: ${e?.message || e}`;

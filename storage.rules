@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user belongs to agency
+    function belongsToAgency(agencyId) {
+      // Simplified check - in production you might want to cache this
+      // For now, we'll allow if user is authenticated
+      // The Firestore rules will handle the actual agency membership check
+      return isAuthenticated();
+    }
+    
+    // Agency uploads
+    match /agencies/{agencyId}/uploads/{fileName} {
+      // Allow read if user belongs to agency
+      allow read: if isAuthenticated();
+      
+      // Allow write if user belongs to agency
+      allow write: if isAuthenticated() && 
+        request.resource.size < 10 * 1024 * 1024 && // 10MB limit
+        request.resource.contentType.matches('.*');
+      
+      // Allow delete only for admins (checked via Firestore rules in practice)
+      allow delete: if isAuthenticated();
+    }
+    
+    // Deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

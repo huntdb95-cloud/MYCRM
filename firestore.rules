@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user role in agency
+    function getUserRole(agencyId) {
+      let userDoc = get(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+      return userDoc != null && userDoc.data != null ? userDoc.data.role : null;
+    }
+    
+    // Helper function to check if user has role
+    function hasRole(agencyId, roles) {
+      let role = getUserRole(agencyId);
+      return role != null && role in roles;
+    }
+    
+    // Agencies collection
+    match /agencies/{agencyId} {
+      // Agency document - users can read their own agency
+      allow read: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+      
+      allow write: if false; // Only admins via Cloud Functions or manual setup
+      
+      // Users subcollection
+      match /users/{userId} {
+        // User can read own doc, admins can read all
+        allow read: if isAuthenticated() && 
+          (userId == request.auth.uid || 
+           hasRole(agencyId, ['admin']));
+        
+        // User can update own doc (limited fields), admins can update all
+        allow update: if isAuthenticated() && 
+          (userId == request.auth.uid || 
+           hasRole(agencyId, ['admin']));
+        
+        allow create: if false; // Only via Cloud Functions or admin
+        allow delete: if false; // Only admins
+      }
+      
+      // Customers collection
+      match /customers/{customerId} {
+        // Agents and admins can read/write all customers
+        // Assistants can read customers
+        allow read: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow create: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid)) &&
+          hasRole(agencyId, ['admin', 'agent']);
+        
+        allow update: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid)) &&
+          hasRole(agencyId, ['admin', 'agent']);
+        
+        // Only admins and agents can delete
+        allow delete: if isAuthenticated() && 
+          hasRole(agencyId, ['admin', 'agent']);
+        
+        // Notes subcollection
+        match /notes/{noteId} {
+          allow read: if isAuthenticated() && 
+            exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+          
+          allow create: if isAuthenticated() && 
+            exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+          
+          allow update, delete: if isAuthenticated() && 
+            hasRole(agencyId, ['admin', 'agent']);
+        }
+        
+        // Policies subcollection
+        match /policies/{policyId} {
+          allow read: if isAuthenticated() && 
+            exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+          
+          allow write: if isAuthenticated() && 
+            hasRole(agencyId, ['admin', 'agent']);
+        }
+      }
+      
+      // Conversations collection
+      match /conversations/{conversationId} {
+        allow read: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow create, update: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow delete: if false; // Keep conversation history
+        
+        // Messages subcollection
+        match /messages/{messageId} {
+          allow read: if isAuthenticated() && 
+            exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+          
+          allow create: if isAuthenticated() && 
+            exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+          
+          allow update: if isAuthenticated() && 
+            hasRole(agencyId, ['admin', 'agent']);
+          
+          allow delete: if false; // Keep message history
+        }
+      }
+      
+      // Tasks collection
+      match /tasks/{taskId} {
+        allow read: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow create: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow update: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        // Assistants can only delete their own tasks
+        // Admins and agents can delete any task
+        allow delete: if isAuthenticated() && 
+          (hasRole(agencyId, ['admin', 'agent']) ||
+           (hasRole(agencyId, ['assistant']) && 
+            resource.data.assignedToUid == request.auth.uid));
+      }
+      
+      // Uploads collection
+      match /uploads/{uploadId} {
+        allow read: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow create: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow delete: if isAuthenticated() && 
+          hasRole(agencyId, ['admin']);
+      }
+      
+      // Phone index collection (internal use)
+      match /phoneIndex/{phoneE164} {
+        allow read: if false; // Internal use only
+        allow write: if false; // Only via Cloud Functions
+      }
+      
+      // Settings collection
+      match /settings/{settingId} {
+        allow read: if isAuthenticated() && 
+          exists(/databases/$(database)/documents/agencies/$(agencyId)/users/$(request.auth.uid));
+        
+        allow write: if isAuthenticated() && 
+          hasRole(agencyId, ['admin']);
+      }
+    }
+  }
+}
