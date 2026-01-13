@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MYCRM</title>
+  <meta name="description" content="A simple CRM built on Firebase." />
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#121b2e;
+      --muted:#9fb0d0;
+      --text:#e9f0ff;
+      --accent:#5eead4;
+      --danger:#fb7185;
+      --border:rgba(255,255,255,.10);
+      --shadow: 0 12px 30px rgba(0,0,0,.45);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 500px at 10% 0%, rgba(94,234,212,.12), transparent 60%),
+                  radial-gradient(900px 500px at 90% 10%, rgba(99,102,241,.18), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      min-height:100vh;
+    }
+    a{color:inherit}
+    .wrap{max-width:1050px;margin:0 auto;padding:22px}
+    header{
+      display:flex;align-items:center;justify-content:space-between;gap:14px;
+      padding:14px 0;
+    }
+    .brand{
+      display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px
+    }
+    .logo{
+      width:42px;height:42px;border-radius:12px;
+      background: linear-gradient(135deg, rgba(94,234,212,.95), rgba(99,102,241,.9));
+      box-shadow: var(--shadow);
+    }
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:10px 14px;border:1px solid var(--border);border-radius:999px;
+      background: rgba(255,255,255,.03);
+      font-weight:600;
+    }
+    .btn{
+      border:none;cursor:pointer;
+      padding:12px 14px;border-radius:12px;
+      color:var(--text);
+      background: rgba(255,255,255,.06);
+      border:1px solid var(--border);
+      font-weight:700;
+    }
+    .btn:hover{background: rgba(255,255,255,.10)}
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(94,234,212,.95), rgba(99,102,241,.9));
+      border: none;
+      color:#081022;
+    }
+    .btn.primary:hover{filter:brightness(1.05)}
+    .btn.danger{
+      background: rgba(251,113,133,.12);
+      border:1px solid rgba(251,113,133,.25);
+      color:#ffd1d8;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:18px;
+      margin-top:18px;
+    }
+    .card{
+      background: rgba(18,27,46,.75);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding:18px;
+      backdrop-filter: blur(8px);
+    }
+    h1{margin:0 0 10px;font-size:42px;line-height:1.05}
+    p{margin:0 0 10px;color:var(--muted);line-height:1.5}
+    .features{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top:14px;
+    }
+    .feature{
+      padding:12px;border-radius:14px;border:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+    }
+    .feature b{display:block;margin-bottom:6px}
+    .stack{display:flex;flex-direction:column;gap:12px}
+    label{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:6px;display:block}
+    input{
+      width:100%;
+      padding:12px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      outline:none;
+    }
+    input:focus{border-color: rgba(94,234,212,.5)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .row .btn{flex:1;min-width:160px}
+    .fine{font-size:12px;color:rgba(159,176,208,.85)}
+    .status{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px dashed var(--border);
+      color: var(--muted);
+      font-size:13px;
+      white-space:pre-wrap;
+    }
+    .hidden{display:none !important}
+    .divider{
+      height:1px;background: var(--border);margin:12px 0;
+    }
+
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr}
+      h1{font-size:34px}
+      .features{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>MYCRM</div>
+      </div>
+
+      <div class="row">
+        <span class="pill" id="pillSignedOut">🔒 Signed out</span>
+        <span class="pill hidden" id="pillSignedIn">✅ Signed in</span>
+        <button class="btn danger hidden" id="btnLogout" type="button">Log out</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <h1>Simple CRM.<br/>Fast.</h1>
+        <p>
+          Sign in to manage customers, notes, tasks, and uploads.
+          This is a clean Firebase starter that you can extend into a full CRM.
+        </p>
+
+        <div class="features">
+          <div class="feature">
+            <b>Customers</b>
+            <span class="fine">Store lead/customer records in Firestore.</span>
+          </div>
+          <div class="feature">
+            <b>Notes & Tasks</b>
+            <span class="fine">Track activity and next steps.</span>
+          </div>
+          <div class="feature">
+            <b>Uploads</b>
+            <span class="fine">Attach documents via Firebase Storage.</span>
+          </div>
+          <div class="feature">
+            <b>Secure by default</b>
+            <span class="fine">Rules included to protect data.</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="fine">
+          Tip: once logged in, redirect to your app (ex: <code>/app.html</code>) or show a dashboard section here.
+        </p>
+      </section>
+
+      <aside class="card">
+        <div id="authBoxSignedOut">
+          <h2 style="margin:0 0 10px;">Sign in / Create account</h2>
+
+          <div class="stack">
+            <div>
+              <label for="email">Email</label>
+              <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+            </div>
+
+            <div>
+              <label for="password">Password</label>
+              <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+              <div class="fine" style="margin-top:6px;">Minimum 6 characters for Firebase email/password auth.</div>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" id="btnLogin" type="button">Log in</button>
+              <button class="btn" id="btnSignup" type="button">Sign up</button>
+            </div>
+
+            <div class="status" id="status">Ready.</div>
+          </div>
+        </div>
+
+        <div id="authBoxSignedIn" class="hidden">
+          <h2 style="margin:0 0 10px;">Welcome</h2>
+          <p class="fine" id="userLine">—</p>
+
+          <div class="divider"></div>
+
+          <div class="stack">
+            <button class="btn primary" id="btnGoDashboard" type="button">
+              Go to Dashboard
+            </button>
+
+            <div class="status" id="statusAuthed">You’re signed in.</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="fine" style="padding:18px 0;opacity:.9;">
+      © <span id="year"></span> MYCRM • Built on Firebase
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+
+  <!-- Your app logic -->
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
