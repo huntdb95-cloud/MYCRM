@@ -1,6 +1,7 @@
 // customers-page.js - Customers list page
+// PREVIOUS FAILURE: Line 18 referenced `db` without importing it, causing "db is not defined" error when adding customers
 
-import { auth } from './firebase.js';
+import { auth, db, app } from './firebase.js';
 import { signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { initAuthGuard, userStore } from './auth-guard.js';
 import { initRouter, navigateTo, getUrlParam } from './router.js';
@@ -14,10 +15,13 @@ async function init() {
   try {
     console.log('[customers-page.js] Initializing...');
     
-    // Verify Firebase services
+    // Startup assertion - verify Firebase services and log readiness
     if (!auth || !db) {
-      throw new Error('Firebase services not initialized. Check firebase.js for errors.');
+      const errorMsg = 'Firebase services not initialized. Check firebase.js for errors.';
+      console.error('[customers-page.js]', errorMsg);
+      throw new Error(errorMsg);
     }
+    console.log("Firebase ready:", { hasDb: !!db, hasAuth: !!auth, projectId: app?.options?.projectId });
     
     await initAuthGuard();
     initRouter();

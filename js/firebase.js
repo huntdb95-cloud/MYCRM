@@ -6,7 +6,7 @@ console.log('[firebase.js] Module loading...');
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-functions.js";
 
@@ -252,10 +252,12 @@ try {
 }
 
 // Export services (will be null if initialization failed)
+export const app = initializationState.app;
 export const auth = initializationState.auth;
 export const db = initializationState.db;
 export const storage = initializationState.storage;
 export const functions = initializationState.functions;
+export { serverTimestamp };
 
 // Helper to get callable function
 export const getCallable = (name) => {
