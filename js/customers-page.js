@@ -5,9 +5,10 @@ import { auth, db, app } from './firebase.js';
 import { signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { initAuthGuard, userStore } from './auth-guard.js';
 import { initRouter, navigateTo, getUrlParam } from './router.js';
-import { listCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomer } from './customers.js';
+import { listCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomer, importCSVData } from './customers.js';
 import { formatPhone, formatDateTime } from './models.js';
 import { toast, confirm, debounce, showModal } from './ui.js';
+import { parseCSV, createHeaderMapping, processCSVRow } from './csv-import.js';
 
 let customers = [];
 
@@ -28,9 +29,11 @@ async function init() {
     setupUI();
     await loadCustomers();
     
-    // Check if we should open modal for new customer
+    // Check if we should open modal for new customer or CSV import
     if (getUrlParam('action') === 'new') {
       openCustomerModal();
+    } else if (getUrlParam('import') === '1') {
+      openCSVImportModal();
     }
     
     console.log('[customers-page.js] Initialized successfully');
@@ -115,6 +118,288 @@ function setupUI() {
       }
     });
   }
+  
+  // CSV Import
+  setupCSVImport();
+}
+
+// CSV Import State
+let csvImportData = null;
+let csvProcessedRows = null;
+
+function setupCSVImport() {
+  const csvFileInput = document.getElementById('csvFileInput');
+  const btnCancelImport = document.getElementById('btnCancelImport');
+  const btnImportCSV = document.getElementById('btnImportCSV');
+  const btnCloseImport = document.getElementById('btnCloseImport');
+  const btnDownloadErrors = document.getElementById('btnDownloadErrors');
+  const csvImportModal = document.getElementById('csvImportModal');
+  
+  if (csvFileInput) {
+    csvFileInput.addEventListener('change', handleCSVFileSelect);
+  }
+  
+  if (btnCancelImport) {
+    btnCancelImport.addEventListener('click', closeCSVImportModal);
+  }
+  
+  if (btnImportCSV) {
+    btnImportCSV.addEventListener('click', handleCSVImport);
+  }
+  
+  if (btnCloseImport) {
+    btnCloseImport.addEventListener('click', () => {
+      closeCSVImportModal();
+      loadCustomers(); // Refresh customer list
+    });
+  }
+  
+  if (btnDownloadErrors) {
+    btnDownloadErrors.addEventListener('click', downloadErrorReport);
+  }
+  
+  if (csvImportModal) {
+    csvImportModal.addEventListener('click', (e) => {
+      if (e.target === csvImportModal) {
+        closeCSVImportModal();
+      }
+    });
+  }
+}
+
+function openCSVImportModal() {
+  const modal = document.getElementById('csvImportModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    // Clear previous state
+    csvImportData = null;
+    csvProcessedRows = null;
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('csvPreview').style.display = 'none';
+    document.getElementById('csvImportProgress').style.display = 'none';
+    document.getElementById('csvImportResults').style.display = 'none';
+    document.getElementById('csvImportError').style.display = 'none';
+  }
+}
+
+function closeCSVImportModal() {
+  const modal = document.getElementById('csvImportModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+async function handleCSVFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const errorDiv = document.getElementById('csvImportError');
+  const previewDiv = document.getElementById('csvPreview');
+  const previewStats = document.getElementById('csvPreviewStats');
+  const previewTable = document.getElementById('csvPreviewTable');
+  
+  errorDiv.style.display = 'none';
+  previewDiv.style.display = 'none';
+  
+  try {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    
+    if (rows.length < 2) {
+      throw new Error('CSV must have at least a header row and one data row');
+    }
+    
+    const headers = rows[0];
+    const headerMapping = createHeaderMapping(headers);
+    
+    if (headerMapping.missingFields) {
+      throw new Error(`Missing required fields: ${headerMapping.missingFields.join(', ')}`);
+    }
+    
+    // Process all rows
+    csvProcessedRows = [];
+    for (let i = 1; i < rows.length; i++) {
+      const processed = processCSVRow(rows[i], headerMapping.mapping, headers, i - 1);
+      csvProcessedRows.push(processed);
+    }
+    
+    // Show preview
+    const validRows = csvProcessedRows.filter(r => r.valid);
+    const invalidRows = csvProcessedRows.filter(r => !r.valid);
+    
+    previewStats.innerHTML = `
+      <strong>Preview:</strong> ${csvProcessedRows.length} rows total
+      <br/>
+      <span style="color: var(--success);">✓ ${validRows.length} valid</span>
+      ${invalidRows.length > 0 ? `<span style="color: var(--danger);">✗ ${invalidRows.length} invalid</span>` : ''}
+    `;
+    
+    // Show preview table (first 20 rows)
+    const previewRows = csvProcessedRows.slice(0, 20);
+    previewTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>Row</th>
+          <th>Status</th>
+          <th>Insured Name</th>
+          <th>Address</th>
+          <th>City</th>
+          <th>State</th>
+          <th>Policy Type</th>
+          <th>Insurance Company</th>
+          <th>Premium</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${previewRows.map(row => {
+          const data = row.data || {};
+          const statusBadge = row.valid 
+            ? '<span class="badge badge-success">Valid</span>'
+            : '<span class="badge badge-danger">Invalid</span>';
+          const errors = row.errors.length > 0 
+            ? `<div style="color: var(--danger); font-size: 12px;">${row.errors.join(', ')}</div>`
+            : '';
+          
+          return `
+            <tr>
+              <td>${row.rowIndex}</td>
+              <td>${statusBadge}</td>
+              <td>${data.insuredName || '—'}</td>
+              <td>${data.address || '—'}</td>
+              <td>${data.city || '—'}</td>
+              <td>${data.state || '—'}</td>
+              <td>${data.policyTypeNormalized || data.rawPolicyType || '—'}</td>
+              <td>${data.insuranceCompany || '—'}</td>
+              <td>${data.premium != null ? '$' + data.premium.toLocaleString() : '—'}</td>
+              <td>${errors}</td>
+            </tr>
+          `;
+        }).join('')}
+        ${csvProcessedRows.length > 20 ? `<tr><td colspan="10" style="text-align: center; color: var(--muted);">... and ${csvProcessedRows.length - 20} more rows</td></tr>` : ''}
+      </tbody>
+    `;
+    
+    previewDiv.style.display = 'block';
+    csvImportData = { headers, headerMapping: headerMapping.mapping, rows };
+    
+  } catch (error) {
+    console.error('Error processing CSV:', error);
+    errorDiv.textContent = error.message || 'Failed to process CSV file';
+    errorDiv.style.display = 'block';
+  }
+}
+
+async function handleCSVImport() {
+  if (!csvProcessedRows || csvProcessedRows.length === 0) {
+    toast('No data to import', 'error');
+    return;
+  }
+  
+  const validRows = csvProcessedRows.filter(r => r.valid && r.data);
+  if (validRows.length === 0) {
+    toast('No valid rows to import', 'error');
+    return;
+  }
+  
+  const btnImportCSV = document.getElementById('btnImportCSV');
+  const previewDiv = document.getElementById('csvPreview');
+  const progressDiv = document.getElementById('csvImportProgress');
+  const resultsDiv = document.getElementById('csvImportResults');
+  const progressText = document.getElementById('csvImportProgressText');
+  
+  btnImportCSV.disabled = true;
+  previewDiv.style.display = 'none';
+  progressDiv.style.display = 'block';
+  resultsDiv.style.display = 'none';
+  
+  try {
+    let currentBatch = 0;
+    let totalBatches = 0;
+    
+    const results = await importCSVData(csvProcessedRows, (batchNum, total) => {
+      currentBatch = batchNum;
+      totalBatches = total;
+      progressText.textContent = `Importing batch ${batchNum} of ${total}...`;
+    });
+    
+    // Show results
+    progressDiv.style.display = 'none';
+    resultsDiv.style.display = 'block';
+    
+    const resultsContent = document.getElementById('csvImportResultsContent');
+    resultsContent.innerHTML = `
+      <div style="margin-bottom: 16px;">
+        <strong>Import Complete!</strong>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+        <div style="padding: 12px; background: rgba(94, 234, 212, 0.1); border-radius: 8px;">
+          <div style="font-size: 24px; font-weight: bold; color: var(--success);">${results.imported}</div>
+          <div style="font-size: 12px; color: var(--muted);">New Customers</div>
+        </div>
+        <div style="padding: 12px; background: rgba(99, 102, 241, 0.1); border-radius: 8px;">
+          <div style="font-size: 24px; font-weight: bold; color: var(--accent);">${results.updated}</div>
+          <div style="font-size: 12px; color: var(--muted);">Updated Customers</div>
+        </div>
+        <div style="padding: 12px; background: rgba(251, 113, 133, 0.1); border-radius: 8px;">
+          <div style="font-size: 24px; font-weight: bold; color: var(--danger);">${results.skipped}</div>
+          <div style="font-size: 12px; color: var(--muted);">Skipped Rows</div>
+        </div>
+      </div>
+      ${results.errors.length > 0 ? `
+        <div style="margin-top: 16px; padding: 12px; background: rgba(251, 113, 133, 0.1); border-radius: 8px;">
+          <strong style="color: var(--danger);">Errors:</strong>
+          <div style="margin-top: 8px; max-height: 200px; overflow-y: auto;">
+            ${results.errors.slice(0, 50).map(err => 
+              `<div style="font-size: 12px; margin-bottom: 4px;">Row ${err.row}: ${err.errors.join(', ')}</div>`
+            ).join('')}
+            ${results.errors.length > 50 ? `<div style="font-size: 12px; color: var(--muted);">... and ${results.errors.length - 50} more errors</div>` : ''}
+          </div>
+        </div>
+      ` : ''}
+    `;
+    
+    // Store results for error download
+    window.csvImportResults = results;
+    
+    toast(`Import complete: ${results.imported} imported, ${results.updated} updated, ${results.skipped} skipped`, 'success');
+    
+  } catch (error) {
+    console.error('Error importing CSV:', error);
+    toast(error.message || 'Failed to import CSV', 'error');
+    progressDiv.style.display = 'none';
+    previewDiv.style.display = 'block';
+  } finally {
+    btnImportCSV.disabled = false;
+  }
+}
+
+function downloadErrorReport() {
+  if (!window.csvImportResults || !window.csvImportResults.errors || window.csvImportResults.errors.length === 0) {
+    toast('No errors to download', 'info');
+    return;
+  }
+  
+  // Create CSV content
+  const headers = ['Row', 'Errors'];
+  const rows = window.csvImportResults.errors.map(err => [
+    err.row,
+    err.errors.join('; ')
+  ]);
+  
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+  
+  // Download
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `csv-import-errors-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function loadCustomers() {

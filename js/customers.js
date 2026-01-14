@@ -15,7 +15,8 @@ import {
   orderBy, 
   limit,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { normalizePhone, createCustomerData, validateCustomer } from './models.js';
 import { toast } from './ui.js';
@@ -235,5 +236,263 @@ export async function updateLastContact(customerId, messageSnippet) {
     });
   } catch (error) {
     console.error('Error updating last contact:', error);
+  }
+}
+
+/**
+ * Get policies collection reference for a customer
+ */
+function getPoliciesRef(customerId) {
+  return collection(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies');
+}
+
+/**
+ * Normalize address fields for deduplication
+ */
+function normalizeAddress(str) {
+  if (!str) return '';
+  return str.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Find customer by name, address, and zip (for deduplication)
+ */
+export async function findCustomerByNameAddressZip(insuredName, address, zip) {
+  try {
+    const normalizedName = normalizeAddress(insuredName);
+    const normalizedAddress = normalizeAddress(address);
+    const normalizedZip = normalizeAddress(zip);
+    
+    // Search for customers with matching name prefix (case-insensitive search not supported by Firestore)
+    // We'll search using the raw name and filter in memory
+    // Note: This is not perfect but works for deduplication
+    const searchName = insuredName.trim().substring(0, 20); // Use first 20 chars for prefix match
+    let q = query(
+      getCustomersRef(),
+      where('fullName', '>=', searchName),
+      where('fullName', '<=', searchName + '\uf8ff'),
+      limit(100) // Limit for performance
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    // Filter for exact match on normalized name + address + zip
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const customerAddress = data.address || {};
+      const customerName = normalizeAddress(data.fullName || '');
+      const customerAddressStr = normalizeAddress(customerAddress.street || '');
+      const customerZip = normalizeAddress(customerAddress.zip || '');
+      
+      if (customerName === normalizedName && 
+          customerAddressStr === normalizedAddress && 
+          customerZip === normalizedZip) {
+        return {
+          id: docSnap.id,
+          ...data
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding customer by name/address/zip:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if policy already exists (by customerId + policyType + effectiveDate + insuranceCompany + premium)
+ */
+export async function findExistingPolicy(customerId, policyTypeNormalized, effectiveDate, insuranceCompany, premium) {
+  try {
+    const policiesRef = getPoliciesRef(customerId);
+    const snapshot = await getDocs(policiesRef);
+    
+    // Convert effectiveDate to comparable format
+    const effDate = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
+    const effDateStr = effDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const existingEffDate = data.effectiveDate?.toDate ? data.effectiveDate.toDate() : new Date(data.effectiveDate);
+      const existingEffDateStr = existingEffDate.toISOString().split('T')[0];
+      
+      // Compare policy type, effective date, company, and premium (within 0.01 tolerance for floating point)
+      if (data.policyTypeNormalized === policyTypeNormalized &&
+          existingEffDateStr === effDateStr &&
+          (data.insuranceCompany || '').trim().toLowerCase() === (insuranceCompany || '').trim().toLowerCase() &&
+          Math.abs((data.premium || 0) - premium) < 0.01) {
+        return {
+          id: docSnap.id,
+          ...data
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding existing policy:', error);
+    return null;
+  }
+}
+
+/**
+ * Import CSV data (customers and policies) with batching and deduplication
+ */
+export async function importCSVData(processedRows, progressCallback) {
+  const results = {
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    errors: []
+  };
+  
+  const BATCH_SIZE = 400; // Firestore batch limit is 500, use 400 to be safe
+  
+  try {
+    // Process rows in batches
+    const validRows = processedRows.filter(r => r.valid && r.data);
+    const invalidRows = processedRows.filter(r => !r.valid);
+    
+    results.skipped += invalidRows.length;
+    results.errors = invalidRows.map(r => ({
+      row: r.rowIndex,
+      errors: r.errors
+    }));
+    
+    // Group operations by batch
+    let currentBatch = writeBatch(db);
+    let batchOpCount = 0;
+    let batchNumber = 1;
+    const totalBatches = Math.ceil(validRows.length / (BATCH_SIZE / 2)); // Estimate: ~2 ops per row
+    
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      const rowData = row.data;
+      
+      try {
+        // Find or create customer
+        let customer = await findCustomerByNameAddressZip(
+          rowData.insuredName,
+          rowData.address,
+          rowData.zip
+        );
+        
+        let customerId;
+        let isNewCustomer = false;
+        
+        if (customer) {
+          // Update existing customer
+          customerId = customer.id;
+          const customerRef = doc(getCustomersRef(), customerId);
+          currentBatch.update(customerRef, {
+            updatedAt: serverTimestamp(),
+            // Update address fields if they changed
+            'address.street': rowData.address,
+            'address.city': rowData.city,
+            'address.state': rowData.state,
+            'address.zip': rowData.zip,
+          });
+          batchOpCount++;
+          results.updated++;
+        } else {
+          // Create new customer
+          customerId = doc(getCustomersRef()).id;
+          const customerRef = doc(getCustomersRef(), customerId);
+          currentBatch.set(customerRef, {
+            fullName: rowData.insuredName,
+            firstName: null,
+            lastName: null,
+            phoneE164: null,
+            phoneRaw: null,
+            email: null,
+            notes: null,
+            address: {
+              street: rowData.address,
+              city: rowData.city,
+              state: rowData.state,
+              zip: rowData.zip,
+            },
+            preferredLanguage: 'en',
+            tags: [],
+            status: 'lead',
+            source: 'CSV Import',
+            assignedToUid: null,
+            lastContactAt: null,
+            lastMessageSnippet: null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          batchOpCount++;
+          results.imported++;
+          isNewCustomer = true;
+        }
+        
+        // Check if policy already exists
+        const existingPolicy = await findExistingPolicy(
+          customerId,
+          rowData.policyTypeNormalized,
+          rowData.effectiveDate,
+          rowData.insuranceCompany,
+          rowData.premium
+        );
+        
+        if (!existingPolicy) {
+          // Create new policy
+          const policyRef = doc(getPoliciesRef(customerId));
+          const effectiveTimestamp = Timestamp.fromDate(rowData.effectiveDate);
+          const expirationTimestamp = Timestamp.fromDate(rowData.expirationDate);
+          
+          currentBatch.set(policyRef, {
+            policyTypeNormalized: rowData.policyTypeNormalized,
+            rawPolicyType: rowData.rawPolicyType,
+            effectiveDate: effectiveTimestamp,
+            expirationDate: expirationTimestamp,
+            insuranceCompany: rowData.insuranceCompany,
+            premium: rowData.premium,
+            status: 'active',
+            importedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          batchOpCount++;
+        } else {
+          // Policy already exists, skip
+          results.skipped++;
+        }
+        
+        // Commit batch if we're approaching the limit
+        if (batchOpCount >= BATCH_SIZE - 10) {
+          await currentBatch.commit();
+          if (progressCallback) {
+            progressCallback(batchNumber, totalBatches);
+          }
+          currentBatch = writeBatch(db);
+          batchOpCount = 0;
+          batchNumber++;
+        }
+      } catch (error) {
+        console.error(`Error processing row ${row.rowIndex}:`, error);
+        results.errors.push({
+          row: row.rowIndex,
+          errors: [error.message || 'Unknown error']
+        });
+        results.skipped++;
+      }
+    }
+    
+    // Commit remaining batch
+    if (batchOpCount > 0) {
+      await currentBatch.commit();
+      if (progressCallback) {
+        progressCallback(batchNumber, totalBatches);
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error importing CSV data:', error);
+    throw error;
   }
 }
