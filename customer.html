@@ -133,6 +133,75 @@
       </div>
     </main>
 
+    <!-- Policy Modal -->
+    <div id="policyModal" class="modal-overlay hidden">
+      <div class="modal">
+        <h2 id="policyModalTitle">New Policy</h2>
+        <form id="policyForm">
+          <input type="hidden" id="policyId" />
+          <input type="hidden" id="expirationManuallySet" value="false" />
+          <div id="policyFormError" style="display: none; padding: 12px; margin-bottom: 16px; background: rgba(251, 113, 133, 0.15); border: 1px solid rgba(251, 113, 133, 0.3); border-radius: 8px; color: var(--danger);"></div>
+          
+          <div class="form-group">
+            <label class="form-label">Policy Type *</label>
+            <input type="text" id="policyType" class="form-input" list="policyTypes" required placeholder="e.g., Personal Auto, Commercial Auto, WC" />
+            <datalist id="policyTypes">
+              <option value="Personal Auto">Personal Auto</option>
+              <option value="Commercial Auto">Commercial Auto</option>
+              <option value="Workers Compensation">Workers Compensation</option>
+              <option value="General Liability">General Liability</option>
+              <option value="Property">Property</option>
+              <option value="Umbrella">Umbrella</option>
+            </datalist>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Insurance Company</label>
+            <input type="text" id="insuranceCompany" class="form-input" placeholder="Insurance company name" />
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Effective Date *</label>
+            <input type="date" id="effectiveDate" class="form-input" required />
+          </div>
+          
+          <div class="form-group" id="termMonthsGroup" style="display: none;">
+            <label class="form-label">Term Length</label>
+            <select id="termMonths" class="form-select">
+              <option value="6">6 months</option>
+              <option value="12" selected>12 months</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Expiration Date *</label>
+            <input type="date" id="expirationDate" class="form-input" required />
+            <small style="color: var(--muted); font-size: 12px; margin-top: 4px; display: block;">Automatically calculated from effective date</small>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Premium</label>
+            <input type="number" id="premium" class="form-input" step="0.01" min="0" placeholder="0.00" />
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="policyStatus" class="form-select">
+              <option value="active" selected>Active</option>
+              <option value="pending">Pending</option>
+              <option value="expired">Expired</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+            <button type="button" class="btn" id="btnCancelPolicy">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Policy</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <nav class="bottom-nav mobile-only">
       <a href="/app.html" class="bottom-nav-link" data-nav><span class="icon">📊</span><span>Dashboard</span></a>
       <a href="/customers.html" class="bottom-nav-link active" data-nav><span class="icon">👥</span><span>Customers</span></a>

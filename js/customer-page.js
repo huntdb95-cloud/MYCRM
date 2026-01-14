@@ -8,9 +8,9 @@ import { getCustomer, updateCustomer } from './customers.js';
 import { getConversationForCustomer, getMessages, sendSms, subscribeToMessages } from './messages.js';
 import { listTasks, createTask } from './tasks.js';
 import { listUploads, uploadFile } from './uploads.js';
-import { formatPhone, formatDateTime } from './models.js';
+import { formatPhone, formatDateTime, formatDateOnly, addMonths, addYears, normalizeToDate } from './models.js';
 import { toast } from './ui.js';
-import { collection, doc, getDocs, setDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { collection, doc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 let customerId = null;
 let customer = null;
@@ -139,6 +139,12 @@ function setupUI() {
   const btnEdit = document.getElementById('btnEdit');
   if (btnEdit) {
     btnEdit.addEventListener('click', handleEditClick);
+  }
+  
+  // New policy button
+  const btnNewPolicy = document.getElementById('btnNewPolicy');
+  if (btnNewPolicy) {
+    btnNewPolicy.addEventListener('click', () => openPolicyModal());
   }
   
   // Check role and set edit button state
@@ -732,16 +738,16 @@ async function loadPolicies() {
         </thead>
         <tbody>
           ${policies.map(policy => {
-            const effDate = policy.effectiveDate?.toDate ? policy.effectiveDate.toDate() : new Date(policy.effectiveDate);
-            const expDate = policy.expirationDate?.toDate ? policy.expirationDate.toDate() : new Date(policy.expirationDate);
+            const effDate = policy.effectiveDate?.toDate ? policy.effectiveDate.toDate() : (policy.effectiveDate ? new Date(policy.effectiveDate) : null);
+            const expDate = policy.expirationDate?.toDate ? policy.expirationDate.toDate() : (policy.expirationDate ? new Date(policy.expirationDate) : null);
             const premium = policy.premium != null ? `$${policy.premium.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
             
             return `
-              <tr>
-                <td>${policy.policyTypeNormalized || policy.rawPolicyType || '—'}</td>
+              <tr style="cursor: pointer;" onclick="editPolicy('${policy.id}')">
+                <td>${policy.policyTypeNormalized || policy.policyType || policy.rawPolicyType || '—'}</td>
                 <td>${policy.insuranceCompany || '—'}</td>
-                <td>${formatDateTime(effDate)}</td>
-                <td>${formatDateTime(expDate)}</td>
+                <td>${effDate ? formatDateOnly(effDate) : '—'}</td>
+                <td>${expDate ? formatDateOnly(expDate) : '—'}</td>
                 <td>${premium}</td>
                 <td><span class="badge badge-info">${policy.status || 'active'}</span></td>
               </tr>
@@ -758,6 +764,368 @@ async function loadPolicies() {
     }
     toast('Failed to load policies', 'error');
   }
+}
+
+// Policy modal functions
+let currentPolicyId = null;
+
+window.editPolicy = async function(policyId) {
+  try {
+    if (!userStore.agencyId) {
+      toast('Agency ID not available', 'error');
+      return;
+    }
+    
+    const policyRef = doc(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies', policyId);
+    const policySnap = await getDoc(policyRef);
+    
+    if (!policySnap.exists()) {
+      toast('Policy not found', 'error');
+      return;
+    }
+    
+    const policy = { id: policySnap.id, ...policySnap.data() };
+    openPolicyModal(policy);
+  } catch (error) {
+    console.error('Error loading policy:', error);
+    toast('Failed to load policy', 'error');
+  }
+};
+
+function openPolicyModal(policy = null) {
+  const modal = document.getElementById('policyModal');
+  const modalTitle = document.getElementById('policyModalTitle');
+  const form = document.getElementById('policyForm');
+  const policyIdInput = document.getElementById('policyId');
+  const errorDiv = document.getElementById('policyFormError');
+  
+  if (modal) modal.classList.remove('hidden');
+  if (form) form.reset();
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  const isEditMode = policy && policy.id;
+  currentPolicyId = isEditMode ? policy.id : null;
+  
+  if (modalTitle) modalTitle.textContent = isEditMode ? 'Edit Policy' : 'New Policy';
+  if (policyIdInput) policyIdInput.value = isEditMode ? policy.id : '';
+  
+  // Populate form fields if editing
+  if (isEditMode) {
+    const policyTypeEl = document.getElementById('policyType');
+    const insuranceCompanyEl = document.getElementById('insuranceCompany');
+    const effectiveDateEl = document.getElementById('effectiveDate');
+    const expirationDateEl = document.getElementById('expirationDate');
+    const premiumEl = document.getElementById('premium');
+    const statusEl = document.getElementById('policyStatus');
+    const termMonthsEl = document.getElementById('termMonths');
+    const expirationManuallySetEl = document.getElementById('expirationManuallySet');
+    
+    if (policyTypeEl) policyTypeEl.value = policy.policyTypeNormalized || policy.policyType || '';
+    if (insuranceCompanyEl) insuranceCompanyEl.value = policy.insuranceCompany || '';
+    if (premiumEl) premiumEl.value = policy.premium != null ? policy.premium : '';
+    if (statusEl) statusEl.value = policy.status || 'active';
+    
+    // Handle dates - format as YYYY-MM-DD in local timezone
+    if (effectiveDateEl) {
+      const effDate = normalizeToDate(policy.effectiveDate);
+      if (effDate) {
+        const year = effDate.getFullYear();
+        const month = String(effDate.getMonth() + 1).padStart(2, '0');
+        const day = String(effDate.getDate()).padStart(2, '0');
+        effectiveDateEl.value = `${year}-${month}-${day}`;
+      }
+    }
+    
+    if (expirationDateEl) {
+      const expDate = normalizeToDate(policy.expirationDate);
+      if (expDate) {
+        const year = expDate.getFullYear();
+        const month = String(expDate.getMonth() + 1).padStart(2, '0');
+        const day = String(expDate.getDate()).padStart(2, '0');
+        expirationDateEl.value = `${year}-${month}-${day}`;
+      }
+    }
+    
+    // Handle Personal Auto term
+    if (termMonthsEl) {
+      termMonthsEl.value = policy.termMonths || '12';
+    }
+    
+    if (expirationManuallySetEl) {
+      expirationManuallySetEl.value = policy.expirationManuallySet ? 'true' : 'false';
+    }
+    
+    // Update UI based on policy type
+    updatePolicyTypeUI();
+  } else {
+    // New policy - set defaults
+    const statusEl = document.getElementById('policyStatus');
+    const termMonthsEl = document.getElementById('termMonths');
+    if (statusEl) statusEl.value = 'active';
+    if (termMonthsEl) termMonthsEl.value = '12';
+    
+    // Update UI
+    updatePolicyTypeUI();
+  }
+}
+
+function closePolicyModal() {
+  const modal = document.getElementById('policyModal');
+  if (modal) modal.classList.add('hidden');
+  currentPolicyId = null;
+}
+
+function updatePolicyTypeUI() {
+  const policyTypeEl = document.getElementById('policyType');
+  const termGroupEl = document.getElementById('termMonthsGroup');
+  const expirationManuallySetEl = document.getElementById('expirationManuallySet');
+  
+  if (!policyTypeEl || !termGroupEl) return;
+  
+  const policyType = policyTypeEl.value.toLowerCase();
+  const isPersonalAuto = policyType === 'personal auto' || policyType === 'pa';
+  
+  termGroupEl.style.display = isPersonalAuto ? 'block' : 'none';
+  
+  // If policy type changed away from Personal Auto, reset manual flag and recalculate
+  if (!isPersonalAuto && expirationManuallySetEl) {
+    expirationManuallySetEl.value = 'false';
+    recalculateExpiration();
+  } else if (isPersonalAuto) {
+    // When switching to Personal Auto, recalculate based on term
+    recalculateExpiration();
+  }
+}
+
+function recalculateExpiration() {
+  const effectiveDateEl = document.getElementById('effectiveDate');
+  const expirationDateEl = document.getElementById('expirationDate');
+  const expirationManuallySetEl = document.getElementById('expirationManuallySet');
+  const policyTypeEl = document.getElementById('policyType');
+  const termMonthsEl = document.getElementById('termMonths');
+  
+  if (!effectiveDateEl || !expirationDateEl) return;
+  
+  // Don't recalculate if manually set
+  if (expirationManuallySetEl && expirationManuallySetEl.value === 'true') {
+    return;
+  }
+  
+  const effectiveDateStr = effectiveDateEl.value;
+  if (!effectiveDateStr) {
+    expirationDateEl.value = '';
+    return;
+  }
+  
+  const effectiveDate = new Date(effectiveDateStr);
+  if (isNaN(effectiveDate.getTime())) {
+    return;
+  }
+  
+  // Determine term length
+  let months = 12; // Default 1 year
+  
+  const policyType = policyTypeEl ? policyTypeEl.value.toLowerCase() : '';
+  const isPersonalAuto = policyType === 'personal auto' || policyType === 'pa';
+  
+  if (isPersonalAuto && termMonthsEl) {
+    months = parseInt(termMonthsEl.value) || 12;
+  }
+  
+  // Calculate expiration
+  const expirationDate = addMonths(effectiveDate, months);
+  // Format as YYYY-MM-DD in local timezone
+  const year = expirationDate.getFullYear();
+  const month = String(expirationDate.getMonth() + 1).padStart(2, '0');
+  const day = String(expirationDate.getDate()).padStart(2, '0');
+  expirationDateEl.value = `${year}-${month}-${day}`;
+}
+
+// Wire up event listeners for policy form
+function setupPolicyForm() {
+  const form = document.getElementById('policyForm');
+  const btnCancelPolicy = document.getElementById('btnCancelPolicy');
+  const policyModal = document.getElementById('policyModal');
+  const effectiveDateEl = document.getElementById('effectiveDate');
+  const policyTypeEl = document.getElementById('policyType');
+  const termMonthsEl = document.getElementById('termMonths');
+  const expirationDateEl = document.getElementById('expirationDate');
+  
+  if (form) {
+    form.addEventListener('submit', handlePolicySubmit);
+  }
+  
+  if (btnCancelPolicy) {
+    btnCancelPolicy.addEventListener('click', closePolicyModal);
+  }
+  
+  if (policyModal) {
+    policyModal.addEventListener('click', (e) => {
+      if (e.target === policyModal) {
+        closePolicyModal();
+      }
+    });
+  }
+  
+  // Auto-calculate expiration when effective date changes
+  if (effectiveDateEl) {
+    effectiveDateEl.addEventListener('change', recalculateExpiration);
+    effectiveDateEl.addEventListener('input', recalculateExpiration);
+  }
+  
+  // Update UI when policy type changes
+  if (policyTypeEl) {
+    policyTypeEl.addEventListener('change', () => {
+      updatePolicyTypeUI();
+      recalculateExpiration();
+    });
+  }
+  
+  // Update expiration when term changes (Personal Auto)
+  if (termMonthsEl) {
+    termMonthsEl.addEventListener('change', recalculateExpiration);
+  }
+  
+  // Track manual expiration edits
+  if (expirationDateEl) {
+    expirationDateEl.addEventListener('change', () => {
+      const expirationManuallySetEl = document.getElementById('expirationManuallySet');
+      if (expirationManuallySetEl) {
+        expirationManuallySetEl.value = 'true';
+      }
+    });
+  }
+}
+
+async function handlePolicySubmit(e) {
+  e.preventDefault();
+  
+  const submitBtn = document.querySelector('#policyForm button[type="submit"]');
+  const errorDiv = document.getElementById('policyFormError');
+  
+  // Clear previous errors
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  // Disable submit button
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+  }
+  
+  try {
+    if (!userStore.agencyId) {
+      throw new Error('Agency ID not available');
+    }
+    
+    // Gather form data
+    const policyTypeEl = document.getElementById('policyType');
+    const insuranceCompanyEl = document.getElementById('insuranceCompany');
+    const effectiveDateEl = document.getElementById('effectiveDate');
+    const expirationDateEl = document.getElementById('expirationDate');
+    const premiumEl = document.getElementById('premium');
+    const statusEl = document.getElementById('policyStatus');
+    const termMonthsEl = document.getElementById('termMonths');
+    const expirationManuallySetEl = document.getElementById('expirationManuallySet');
+    
+    const policyType = policyTypeEl ? policyTypeEl.value.trim() : '';
+    if (!policyType) {
+      throw new Error('Policy type is required');
+    }
+    
+    const effectiveDateStr = effectiveDateEl ? effectiveDateEl.value : '';
+    if (!effectiveDateStr) {
+      throw new Error('Effective date is required');
+    }
+    
+    const expirationDateStr = expirationDateEl ? expirationDateEl.value : '';
+    if (!expirationDateStr) {
+      throw new Error('Expiration date is required');
+    }
+    
+    // Convert dates to Firestore Timestamps (at noon local time to avoid timezone issues)
+    const effectiveDate = new Date(effectiveDateStr);
+    effectiveDate.setHours(12, 0, 0, 0);
+    
+    const expirationDate = new Date(expirationDateStr);
+    expirationDate.setHours(12, 0, 0, 0);
+    
+    const { Timestamp } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
+    
+    const policyData = {
+      policyTypeNormalized: policyType,
+      policyType: policyType,
+      insuranceCompany: insuranceCompanyEl ? insuranceCompanyEl.value.trim() || null : null,
+      effectiveDate: Timestamp.fromDate(effectiveDate),
+      expirationDate: Timestamp.fromDate(expirationDate),
+      premium: premiumEl && premiumEl.value ? parseFloat(premiumEl.value) : null,
+      status: statusEl ? statusEl.value : 'active',
+      expirationManuallySet: expirationManuallySetEl ? expirationManuallySetEl.value === 'true' : false,
+    };
+    
+    // Add termMonths for Personal Auto
+    const isPersonalAuto = policyType.toLowerCase() === 'personal auto' || policyType.toLowerCase() === 'pa';
+    if (isPersonalAuto && termMonthsEl) {
+      policyData.termMonths = parseInt(termMonthsEl.value) || 12;
+    } else {
+      // For non-Personal Auto, set to 12 for consistency
+      policyData.termMonths = 12;
+    }
+    
+    // Save policy
+    const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
+    
+    if (currentPolicyId) {
+      // Update existing policy
+      const policyRef = doc(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies', currentPolicyId);
+      await setDoc(policyRef, {
+        ...policyData,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      toast('Policy updated successfully', 'success');
+    } else {
+      // Create new policy
+      const policiesRef = collection(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies');
+      const newPolicyRef = doc(policiesRef);
+      await setDoc(newPolicyRef, {
+        ...policyData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      toast('Policy created successfully', 'success');
+    }
+    
+    // Close modal and reload policies
+    closePolicyModal();
+    await loadPolicies();
+  } catch (error) {
+    console.error('Error saving policy:', error);
+    
+    const errorMsg = error.message || 'Failed to save policy';
+    if (errorDiv) {
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
+    }
+    toast(errorMsg, 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      const modalTitle = document.getElementById('policyModalTitle');
+      submitBtn.textContent = (modalTitle && modalTitle.textContent === 'Edit Policy') ? 'Save Changes' : 'Create Policy';
+    }
+  }
+}
+
+// Initialize policy form when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupPolicyForm);
+} else {
+  setupPolicyForm();
 }
 
 init();

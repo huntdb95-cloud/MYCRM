@@ -141,3 +141,103 @@ export function formatDateTime(timestamp) {
     minute: '2-digit'
   });
 }
+
+/**
+ * Format date only (no time) for display - MM/DD/YYYY format
+ * Supports Firestore Timestamp, JS Date, ISO string, null/undefined
+ */
+export function formatDateOnly(value) {
+  if (!value) return '—';
+  
+  let date;
+  if (value.toDate) {
+    // Firestore Timestamp
+    date = value.toDate();
+  } else if (value instanceof Date) {
+    // JS Date
+    date = value;
+  } else if (typeof value === 'string') {
+    // ISO string or date string
+    date = new Date(value);
+    if (isNaN(date.getTime())) {
+      return '—';
+    }
+  } else {
+    return '—';
+  }
+  
+  // Format as MM/DD/YYYY
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  
+  return `${month}/${day}/${year}`;
+}
+
+/**
+ * Add months to a date, handling month-end correctly
+ * @param {Date|Timestamp|string} dateInput - Input date
+ * @param {number} months - Number of months to add
+ * @returns {Date} - New date with months added
+ */
+export function addMonths(dateInput, months) {
+  let date;
+  if (dateInput.toDate) {
+    date = new Date(dateInput.toDate());
+  } else if (dateInput instanceof Date) {
+    date = new Date(dateInput);
+  } else {
+    date = new Date(dateInput);
+  }
+  
+  if (isNaN(date.getTime())) {
+    throw new Error('Invalid date input');
+  }
+  
+  // Get the current day
+  const day = date.getDate();
+  
+  // Set to first day of month to avoid overflow issues
+  date.setDate(1);
+  
+  // Add months
+  date.setMonth(date.getMonth() + months);
+  
+  // Get the last day of the target month
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  
+  // Set the day, but cap at last day of month (handles Jan 31 + 1 month -> Feb 28/29)
+  date.setDate(Math.min(day, lastDayOfMonth));
+  
+  return date;
+}
+
+/**
+ * Add years to a date
+ * @param {Date|Timestamp|string} dateInput - Input date
+ * @param {number} years - Number of years to add
+ * @returns {Date} - New date with years added
+ */
+export function addYears(dateInput, years) {
+  return addMonths(dateInput, years * 12);
+}
+
+/**
+ * Convert a date input to a Date object, handling various input types
+ * @param {Date|Timestamp|string|null|undefined} dateInput - Input date
+ * @returns {Date|null} - Date object or null if invalid
+ */
+export function normalizeToDate(dateInput) {
+  if (!dateInput) return null;
+  
+  if (dateInput.toDate) {
+    return dateInput.toDate();
+  } else if (dateInput instanceof Date) {
+    return new Date(dateInput);
+  } else if (typeof dateInput === 'string') {
+    const date = new Date(dateInput);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  
+  return null;
+}
