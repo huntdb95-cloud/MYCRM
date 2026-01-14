@@ -59,11 +59,11 @@ export async function createCustomer(data) {
       });
     }
     
-    toast('Customer created successfully', 'success');
+    // Toast handled by caller
     return customerRef.id;
   } catch (error) {
     console.error('Error creating customer:', error);
-    toast(error.message || 'Failed to create customer', 'error');
+    // Toast handled by caller
     throw error;
   }
 }
@@ -106,10 +106,11 @@ export async function updateCustomer(customerId, updates) {
     newData.updatedAt = serverTimestamp();
     await updateDoc(customerRef, newData);
     
-    toast('Customer updated successfully', 'success');
+    // Toast handled by caller
   } catch (error) {
     console.error('Error updating customer:', error);
-    toast(error.message || 'Failed to update customer', 'error');
+    console.error('Customer ID attempted:', customerId);
+    // Toast handled by caller
     throw error;
   }
 }

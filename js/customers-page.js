@@ -230,39 +230,79 @@ function openCustomerModal(customer = null) {
   const modal = document.getElementById('customerModal');
   const modalTitle = document.getElementById('modalTitle');
   const form = document.getElementById('customerForm');
-  const customerId = document.getElementById('customerId');
+  const customerIdInput = document.getElementById('customerId');
   const errorDiv = document.getElementById('customerFormError');
-  
-  if (modal) modal.classList.remove('hidden');
-  if (modalTitle) modalTitle.textContent = customer ? 'Edit Customer' : 'New Customer';
-  if (form) form.reset();
-  if (errorDiv) errorDiv.textContent = '';
-  if (errorDiv) errorDiv.style.display = 'none';
-  
-  // Clear any disabled state on submit button
   const submitBtn = document.getElementById('btnSubmit');
+  
+  // Always reset form first to clear all fields including hidden inputs
+  if (form) form.reset();
+  
+  // Clear error display
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  // Reset submit button state
   if (submitBtn) {
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Save';
   }
   
-  if (customer) {
-    if (customerId) customerId.value = customer.id;
-    if (document.getElementById('firstName')) document.getElementById('firstName').value = customer.firstName || '';
-    if (document.getElementById('lastName')) document.getElementById('lastName').value = customer.lastName || '';
-    if (document.getElementById('phoneRaw')) document.getElementById('phoneRaw').value = customer.phoneRaw || '';
-    if (document.getElementById('email')) document.getElementById('email').value = customer.email || '';
-    if (document.getElementById('status')) document.getElementById('status').value = customer.status || 'lead';
-    if (document.getElementById('source')) document.getElementById('source').value = customer.source || '';
-    if (document.getElementById('notes')) document.getElementById('notes').value = customer.notes || '';
+  // Determine mode: EDIT if customer object provided with valid id, otherwise CREATE
+  const isEditMode = customer && customer.id;
+  
+  if (isEditMode) {
+    // EDIT MODE: Populate fields with customer data
+    if (customerIdInput) customerIdInput.value = customer.id;
+    if (modalTitle) modalTitle.textContent = 'Edit Customer';
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+    
+    // Populate all fields
+    const firstNameEl = document.getElementById('firstName');
+    const lastNameEl = document.getElementById('lastName');
+    const phoneRawEl = document.getElementById('phoneRaw');
+    const emailEl = document.getElementById('email');
+    const statusEl = document.getElementById('status');
+    const sourceEl = document.getElementById('source');
+    const notesEl = document.getElementById('notes');
+    
+    if (firstNameEl) firstNameEl.value = customer.firstName || '';
+    if (lastNameEl) lastNameEl.value = customer.lastName || '';
+    if (phoneRawEl) phoneRawEl.value = customer.phoneRaw || '';
+    if (emailEl) emailEl.value = customer.email || '';
+    if (statusEl) statusEl.value = customer.status || 'lead';
+    if (sourceEl) sourceEl.value = customer.source || '';
+    if (notesEl) notesEl.value = customer.notes || '';
   } else {
-    if (customerId) customerId.value = '';
+    // CREATE MODE: Clear all fields and set to create mode
+    if (customerIdInput) customerIdInput.value = '';
+    if (modalTitle) modalTitle.textContent = 'New Customer';
+    if (submitBtn) submitBtn.textContent = 'Create Customer';
   }
+  
+  // Show modal
+  if (modal) modal.classList.remove('hidden');
+  
+  console.log('[customers-page.js] Customer modal opened, mode:', isEditMode ? 'EDIT' : 'CREATE', isEditMode ? `(id: ${customer.id})` : '');
 }
 
 function closeCustomerModal() {
   const modal = document.getElementById('customerModal');
+  const form = document.getElementById('customerForm');
+  const customerIdInput = document.getElementById('customerId');
+  const errorDiv = document.getElementById('customerFormError');
+  
   if (modal) modal.classList.add('hidden');
+  
+  // Reset form and clear state to prevent sticky edit mode
+  if (form) form.reset();
+  if (customerIdInput) customerIdInput.value = '';
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  console.log('[customers-page.js] Customer modal closed, state cleared');
 }
 
 async function handleCustomerSubmit(e) {
@@ -270,7 +310,8 @@ async function handleCustomerSubmit(e) {
   
   const submitBtn = document.getElementById('btnSubmit');
   const errorDiv = document.getElementById('customerFormError');
-  const customerId = document.getElementById('customerId').value;
+  const customerIdInput = document.getElementById('customerId');
+  const customerId = customerIdInput ? customerIdInput.value.trim() : '';
   
   // Clear previous errors
   if (errorDiv) {
@@ -285,8 +326,7 @@ async function handleCustomerSubmit(e) {
   }
   
   try {
-    console.log('[customers-page.js] Submitting customer form, isEdit:', !!customerId);
-    
+    // Gather form data
     const formData = {
       firstName: document.getElementById('firstName').value.trim(),
       lastName: document.getElementById('lastName').value.trim(),
@@ -297,17 +337,26 @@ async function handleCustomerSubmit(e) {
       notes: document.getElementById('notes').value.trim(),
     };
     
+    // Determine mode: EDIT if customerId exists and is not empty, otherwise CREATE
+    const isEditMode = customerId && customerId.length > 0;
+    
+    console.log('[customers-page.js] Submitting customer form, mode:', isEditMode ? 'EDIT' : 'CREATE', isEditMode ? `(id: ${customerId})` : '');
     console.log('[customers-page.js] Form data:', formData);
     
-    if (customerId) {
+    if (isEditMode) {
+      // EDIT MODE: Update existing customer
       console.log('[customers-page.js] Updating customer:', customerId);
       await updateCustomer(customerId, formData);
+      toast('Customer updated successfully', 'success');
     } else {
+      // CREATE MODE: Create new customer
       console.log('[customers-page.js] Creating new customer');
-      await createCustomer(formData);
+      const newCustomerId = await createCustomer(formData);
+      console.log('[customers-page.js] New customer created with ID:', newCustomerId);
+      toast('Customer created successfully', 'success');
     }
     
-    console.log('[customers-page.js] Customer saved successfully');
+    // Close modal and refresh list
     closeCustomerModal();
     await loadCustomers();
   } catch (error) {
@@ -325,10 +374,10 @@ async function handleCustomerSubmit(e) {
     // Also show toast
     toast(errorMsg, 'error');
   } finally {
-    // Re-enable submit button
+    // Re-enable submit button (text will be reset by closeCustomerModal if successful)
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Save';
+      // Don't reset text here - it will be set correctly when modal opens next time
     }
   }
 }

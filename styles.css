@@ -656,6 +656,14 @@ body {
   padding: 16px;
 }
 
+/* Desktop: position modal to the right of sidebar */
+@media (min-width: 769px) {
+  .modal-overlay {
+    padding-left: calc(var(--sidebar-width) + 16px);
+    padding-right: 16px;
+  }
+}
+
 .modal {
   background: var(--card);
   border: 1px solid var(--border);
