@@ -5,26 +5,33 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MYCRM</title>
   <meta name="description" content="A simple CRM built on Firebase." />
+  <link rel="icon" type="image/png" href="logo.png" />
 
   <style>
     :root{
-      --bg:#0b1220;
-      --card:#121b2e;
-      --muted:#9fb0d0;
-      --text:#e9f0ff;
-      --accent:#5eead4;
+      --bg-0:#0a0f1a;
+      --bg-1:#121b2e;
+      --stroke:rgba(255,255,255,.08);
+      --text:#ffffff;
+      --muted:#8b9dc3;
+      --primary:#3b82f6;
+      --primary-2:#60a5fa;
+      --success:#10b981;
       --danger:#fb7185;
-      --border:rgba(255,255,255,.10);
-      --shadow: 0 12px 30px rgba(0,0,0,.45);
-      --radius:16px;
+      --border:var(--stroke);
+      --bg:var(--bg-0);
+      --card:var(--bg-1);
+      --accent:var(--primary);
+      --shadow: 0 8px 24px rgba(0,0,0,.4);
+      --radius:12px;
     }
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: radial-gradient(1200px 500px at 10% 0%, rgba(94,234,212,.12), transparent 60%),
-                  radial-gradient(900px 500px at 90% 10%, rgba(99,102,241,.18), transparent 60%),
-                  var(--bg);
+      background: radial-gradient(1400px 600px at 20% 0%, rgba(59,130,246,.15), transparent 65%),
+                  radial-gradient(1000px 500px at 80% 20%, rgba(96,165,250,.12), transparent 60%),
+                  var(--bg-0);
       color:var(--text);
       min-height:100vh;
     }
@@ -38,13 +45,17 @@
       display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px
     }
     .logo{
-      width:42px;height:42px;border-radius:12px;
-      background: linear-gradient(135deg, rgba(94,234,212,.95), rgba(99,102,241,.9));
-      box-shadow: var(--shadow);
+      height:48px;width:auto;object-fit:contain;border-radius:10px;
+      padding:6px;
+      background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(96,165,250,.08));
+      backdrop-filter:blur(8px);
+      border:1px solid var(--stroke);
+      box-shadow: 0 0 12px rgba(59,130,246,.2), var(--shadow);
+      display:block;transition:all .2s ease;
     }
     .pill{
       display:inline-flex;align-items:center;gap:8px;
-      padding:10px 14px;border:1px solid var(--border);border-radius:999px;
+      padding:10px 14px;border:1px solid var(--stroke);border-radius:999px;
       background: rgba(255,255,255,.03);
       font-weight:600;
     }
@@ -52,17 +63,19 @@
       border:none;cursor:pointer;
       padding:12px 14px;border-radius:12px;
       color:var(--text);
-      background: rgba(255,255,255,.06);
-      border:1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      border:1px solid var(--stroke);
       font-weight:700;
+      transition:all .18s ease;
     }
-    .btn:hover{background: rgba(255,255,255,.10)}
+    .btn:hover{background: rgba(255,255,255,.08);transform:translateY(-1px)}
     .btn.primary{
-      background: linear-gradient(135deg, rgba(94,234,212,.95), rgba(99,102,241,.9));
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
       border: none;
-      color:#081022;
+      color:#ffffff;
+      box-shadow: 0 2px 8px rgba(59,130,246,.3);
     }
-    .btn.primary:hover{filter:brightness(1.05)}
+    .btn.primary:hover{box-shadow: 0 4px 12px rgba(59,130,246,.4);transform:translateY(-1px)}
     .btn.danger{
       background: rgba(251,113,133,.12);
       border:1px solid rgba(251,113,133,.25);
@@ -75,13 +88,15 @@
       margin-top:18px;
     }
     .card{
-      background: rgba(18,27,46,.75);
-      border: 1px solid var(--border);
+      background: var(--bg-1);
+      border: 1px solid var(--stroke);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding:18px;
       backdrop-filter: blur(8px);
+      transition:all .2s ease;
     }
+    .card:hover{box-shadow: 0 12px 32px rgba(0,0,0,.5);transform:translateY(-2px)}
     h1{margin:0 0 10px;font-size:42px;line-height:1.05}
     p{margin:0 0 10px;color:var(--muted);line-height:1.5}
     .features{
@@ -101,12 +116,14 @@
       width:100%;
       padding:12px 12px;
       border-radius:12px;
-      border:1px solid var(--border);
-      background: rgba(0,0,0,.18);
+      border:1px solid var(--stroke);
+      background: rgba(10,15,26,.6);
       color: var(--text);
       outline:none;
+      transition:all .18s ease;
     }
-    input:focus{border-color: rgba(94,234,212,.5)}
+    input:focus{border-color: var(--primary);box-shadow: 0 0 0 3px rgba(59,130,246,.1)}
+    input::placeholder{color:var(--muted)}
     .row{display:flex;gap:10px;flex-wrap:wrap}
     .row .btn{flex:1;min-width:160px}
     .fine{font-size:12px;color:rgba(159,176,208,.85)}
@@ -114,14 +131,17 @@
       margin-top:10px;
       padding:10px 12px;
       border-radius:12px;
-      border:1px dashed var(--border);
+      border:1px dashed var(--stroke);
       color: var(--muted);
       font-size:13px;
       white-space:pre-wrap;
     }
     .hidden{display:none !important}
     .divider{
-      height:1px;background: var(--border);margin:12px 0;
+      height:1px;background: var(--stroke);margin:12px 0;
+    }
+    @media (max-width: 768px){
+      .logo{height:38px}
     }
 
     @media (max-width: 900px){
@@ -136,7 +156,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
+        <img src="logo.png" class="logo" alt="MYCRM Logo" />
         <div>MYCRM</div>
       </div>
 

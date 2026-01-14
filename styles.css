@@ -1,17 +1,28 @@
 /* styles.css - Global CRM styles */
 
 :root {
-  --bg: #0b1220;
-  --card: #121b2e;
-  --muted: #9fb0d0;
-  --text: #e9f0ff;
-  --accent: #5eead4;
+  /* Brand Design Tokens - Dark Navy/Blue Theme */
+  --bg-0: #0a0f1a;
+  --bg-1: #121b2e;
+  --stroke: rgba(255, 255, 255, 0.08);
+  --text: #ffffff;
+  --muted: #8b9dc3;
+  --primary: #3b82f6;
+  --primary-2: #60a5fa;
+  --success: #10b981;
   --danger: #fb7185;
-  --success: #5eead4;
   --warning: #fbbf24;
-  --border: rgba(255, 255, 255, 0.1);
-  --shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
-  --radius: 16px;
+  
+  /* Legacy aliases for compatibility */
+  --bg: var(--bg-0);
+  --card: var(--bg-1);
+  --accent: var(--primary);
+  --border: var(--stroke);
+  
+  /* Shadows and effects */
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+  --radius: 12px;
   --sidebar-width: 260px;
   --top-bar-height: 64px;
 }
@@ -23,9 +34,9 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: radial-gradient(1200px 500px at 10% 0%, rgba(94, 234, 212, 0.12), transparent 60%),
-              radial-gradient(900px 500px at 90% 10%, rgba(99, 102, 241, 0.18), transparent 60%),
-              var(--bg);
+  background: radial-gradient(1400px 600px at 20% 0%, rgba(59, 130, 246, 0.15), transparent 65%),
+              radial-gradient(1000px 500px at 80% 20%, rgba(96, 165, 250, 0.12), transparent 60%),
+              var(--bg-0);
   color: var(--text);
   min-height: 100vh;
 }
@@ -39,8 +50,8 @@ body {
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
-  background: rgba(18, 27, 46, 0.75);
-  border-right: 1px solid var(--border);
+  background: rgba(18, 27, 46, 0.85);
+  border-right: 1px solid var(--stroke);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -48,12 +59,12 @@ body {
   top: 0;
   bottom: 0;
   z-index: 100;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
 }
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--stroke);
 }
 
 .brand {
@@ -66,11 +77,27 @@ body {
 }
 
 .logo {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(94, 234, 212, 0.95), rgba(99, 102, 241, 0.9));
-  box-shadow: var(--shadow);
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  padding: 6px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(96, 165, 250, 0.08));
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2), var(--shadow);
+  display: block;
+  transition: all 0.2s ease;
+}
+
+.logo:hover {
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.3), var(--shadow);
+}
+
+@media (max-width: 768px) {
+  .logo {
+    height: 38px;
+  }
 }
 
 .sidebar-nav {
@@ -95,9 +122,9 @@ body {
 }
 
 .nav-link.active {
-  background: rgba(94, 234, 212, 0.1);
-  color: var(--accent);
-  border-left: 3px solid var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-2);
+  border-left: 3px solid var(--primary);
 }
 
 .nav-link .icon {
@@ -106,7 +133,7 @@ body {
 
 .sidebar-footer {
   padding: 20px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--stroke);
 }
 
 .user-info {
@@ -136,13 +163,13 @@ body {
 /* Top Bar */
 .top-bar {
   height: var(--top-bar-height);
-  background: rgba(18, 27, 46, 0.75);
-  border-bottom: 1px solid var(--border);
+  background: rgba(18, 27, 46, 0.85);
+  border-bottom: 1px solid var(--stroke);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -175,15 +202,21 @@ body {
 .search-box input {
   padding: 8px 12px 8px 36px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--stroke);
+  background: rgba(10, 15, 26, 0.6);
   color: var(--text);
   width: 300px;
   outline: none;
+  transition: all 0.18s ease;
 }
 
 .search-box input:focus {
-  border-color: var(--accent);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-box input::placeholder {
+  color: var(--muted);
 }
 
 .search-icon {
@@ -199,25 +232,29 @@ body {
   padding: 10px 16px;
   border-radius: 8px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke);
   font-weight: 600;
   font-size: 14px;
-  transition: all 0.2s;
+  transition: all 0.18s ease;
 }
 
 .btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--stroke);
+  transform: translateY(-1px);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, rgba(94, 234, 212, 0.95), rgba(99, 102, 241, 0.9));
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
   border: none;
-  color: #081022;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .btn-primary:hover {
-  filter: brightness(1.05);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 
 .btn-danger {
@@ -255,12 +292,18 @@ body {
 
 /* Cards */
 .card {
-  background: rgba(18, 27, 46, 0.75);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 24px;
   backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
 .dashboard-grid {
@@ -270,11 +313,17 @@ body {
 }
 
 .dashboard-card {
-  background: rgba(18, 27, 46, 0.75);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: var(--radius);
   padding: 24px;
   backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
 .dashboard-card h3 {
@@ -296,7 +345,7 @@ body {
 }
 
 .list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .list-item-main {
@@ -360,48 +409,70 @@ body {
   width: 100%;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--stroke);
+  background: rgba(10, 15, 26, 0.6);
   color: var(--text);
   outline: none;
   font-size: 14px;
+  transition: all 0.18s ease;
 }
 
 .form-input:focus {
-  border-color: var(--accent);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-input::placeholder {
+  color: var(--muted);
 }
 
 .form-select {
   width: 100%;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--stroke);
+  background: rgba(10, 15, 26, 0.6);
   color: var(--text);
   outline: none;
   font-size: 14px;
   cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .form-textarea {
   width: 100%;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--stroke);
+  background: rgba(10, 15, 26, 0.6);
   color: var(--text);
   outline: none;
   font-size: 14px;
   resize: vertical;
   min-height: 100px;
   font-family: inherit;
+  transition: all 0.18s ease;
+}
+
+.form-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea::placeholder {
+  color: var(--muted);
 }
 
 /* Tables */
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(18, 27, 46, 0.75);
+  background: var(--bg-1);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -413,23 +484,23 @@ body {
   font-size: 12px;
   text-transform: uppercase;
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--stroke);
 }
 
 .table td {
   padding: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--stroke);
 }
 
 .table tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(59, 130, 246, 0.06);
 }
 
 /* Tabs */
 .tabs {
   display: flex;
   gap: 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--stroke);
   margin-bottom: 24px;
 }
 
@@ -450,8 +521,8 @@ body {
 }
 
 .tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--primary-2);
+  border-bottom-color: var(--primary);
 }
 
 .tab-content {
@@ -496,13 +567,13 @@ body {
 }
 
 .message.inbound .message-bubble {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--stroke);
 }
 
 .message.outbound .message-bubble {
-  background: linear-gradient(135deg, rgba(94, 234, 212, 0.2), rgba(99, 102, 241, 0.2));
-  border: 1px solid rgba(94, 234, 212, 0.3);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(96, 165, 250, 0.15));
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .message-time {
@@ -516,19 +587,29 @@ body {
   display: flex;
   gap: 8px;
   padding: 16px;
-  background: rgba(18, 27, 46, 0.75);
+  background: var(--bg-1);
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--stroke);
 }
 
 .message-compose input {
   flex: 1;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--stroke);
+  background: rgba(10, 15, 26, 0.6);
   color: var(--text);
   outline: none;
+  transition: all 0.18s ease;
+}
+
+.message-compose input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.message-compose input::placeholder {
+  color: var(--muted);
 }
 
 .message-compose button {
@@ -546,8 +627,8 @@ body {
 }
 
 .badge-success {
-  background: rgba(94, 234, 212, 0.15);
-  color: var(--accent);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
 }
 
 .badge-danger {
@@ -561,8 +642,8 @@ body {
 }
 
 .badge-info {
-  background: rgba(99, 102, 241, 0.15);
-  color: #c7d2fe;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-2);
 }
 
 /* Mobile */
@@ -607,12 +688,12 @@ body {
     left: 0;
     right: 0;
     background: rgba(18, 27, 46, 0.95);
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--stroke);
     display: flex;
     justify-content: space-around;
     padding: 8px 0;
     z-index: 100;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
   }
   
   .bottom-nav-link {
@@ -628,7 +709,7 @@ body {
   }
   
   .bottom-nav-link.active {
-    color: var(--accent);
+    color: var(--primary-2);
   }
   
   .bottom-nav-link .icon {
@@ -665,8 +746,8 @@ body {
 }
 
 .modal {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: var(--radius);
   padding: 24px;
   width: 100%;
@@ -706,14 +787,14 @@ body {
   top: 100%;
   right: 0;
   margin-top: 8px;
-  background: rgba(18, 27, 46, 0.95);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   min-width: 200px;
   display: none;
   z-index: 1000;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
 }
 
 .user-menu-dropdown.show {
@@ -739,20 +820,26 @@ body {
 
 .user-menu-divider {
   height: 1px;
-  background: var(--border);
+  background: var(--stroke);
   margin: 4px 0;
 }
 
 /* Snapshot Cards */
 .snapshot-card {
-  background: rgba(18, 27, 46, 0.75);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: var(--radius);
   padding: 20px;
   display: flex;
   align-items: center;
   gap: 16px;
   backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.snapshot-card:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
 .snapshot-icon {
@@ -762,7 +849,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(94, 234, 212, 0.1);
+  background: rgba(59, 130, 246, 0.12);
   border-radius: 12px;
   flex-shrink: 0;
 }
