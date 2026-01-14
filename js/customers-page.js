@@ -505,7 +505,46 @@ function downloadErrorReport() {
 }
 
 async function loadCustomers() {
+  const customersList = document.getElementById('customersList');
+  
+  // Clear any existing timeout
+  if (loadTimeout) {
+    clearTimeout(loadTimeout);
+    loadTimeout = null;
+  }
+  
+  // Show loading state
+  setLoadingState(true);
+  
+  // Set a timeout failsafe (5 seconds)
+  loadTimeout = setTimeout(() => {
+    const customersListEl = document.getElementById('customersList');
+    if (customersListEl && customersListEl.textContent === 'Loading...') {
+      console.warn('[customers-page.js] Load timeout reached, showing timeout message');
+      customersListEl.innerHTML = `
+        <div style="padding: 24px; text-align: center;">
+          <div style="color: var(--muted); margin-bottom: 16px;">Still loading...</div>
+          <div style="color: var(--text); margin-bottom: 20px; font-size: 14px;">Check console for errors</div>
+          <button class="btn btn-primary" onclick="window.loadCustomersRetry && window.loadCustomersRetry()">Retry</button>
+        </div>
+      `;
+      window.loadCustomersRetry = loadCustomers;
+    }
+  }, 5000);
+  
   try {
+    // Check if agencyId is available
+    if (!userStore.agencyId) {
+      console.warn('[customers-page.js] No agencyId available, cannot load customers');
+      // Clear timeout
+      if (loadTimeout) {
+        clearTimeout(loadTimeout);
+        loadTimeout = null;
+      }
+      renderErrorState('No agency found. Please sign in again.');
+      return;
+    }
+    
     const searchInput = document.getElementById('searchInput');
     const filterStatus = document.getElementById('filterStatus');
     const filterAssigned = document.getElementById('filterAssigned');
@@ -521,12 +560,86 @@ async function loadCustomers() {
       filters.assignedToUid = filterAssigned.value;
     }
     
+    console.log('[customers-page.js] Loading customers with filters:', filters);
     customers = await listCustomers(filters);
+    console.log('[customers-page.js] Loaded customers:', customers.length);
+    
+    // Clear timeout
+    if (loadTimeout) {
+      clearTimeout(loadTimeout);
+      loadTimeout = null;
+    }
+    
+    // Render customers (this clears loading state)
     renderCustomers();
   } catch (error) {
-    console.error('Error loading customers:', error);
+    console.error('[customers-page.js] Error loading customers:', error);
+    console.error('[customers-page.js] Error code:', error.code);
+    console.error('[customers-page.js] Error message:', error.message);
+    console.error('[customers-page.js] Error stack:', error.stack);
+    
+    // Clear timeout
+    if (loadTimeout) {
+      clearTimeout(loadTimeout);
+      loadTimeout = null;
+    }
+    
+    // Show error state (this clears loading state)
+    const errorMessage = humanizeFirestoreError(error);
+    renderErrorState(errorMessage);
+    
+    // Also show toast
     toast('Failed to load customers', 'error');
   }
+}
+
+function setLoadingState(isLoading) {
+  const customersList = document.getElementById('customersList');
+  if (!customersList) return;
+  
+  if (isLoading) {
+    customersList.innerHTML = '<p class="empty-state">Loading...</p>';
+  }
+  // Loading state is cleared when renderCustomers or renderErrorState is called
+}
+
+function renderErrorState(errorMessage) {
+  const customersList = document.getElementById('customersList');
+  if (!customersList) return;
+  
+  customersList.innerHTML = `
+    <div style="padding: 24px; text-align: center;">
+      <div style="color: var(--danger); margin-bottom: 16px; font-weight: 600;">⚠️ Error Loading Customers</div>
+      <div style="color: var(--text); margin-bottom: 20px;">${errorMessage}</div>
+      <button class="btn btn-primary" onclick="window.loadCustomersRetry && window.loadCustomersRetry()">Retry</button>
+    </div>
+  `;
+  
+  // Store retry function globally
+  window.loadCustomersRetry = loadCustomers;
+}
+
+function humanizeFirestoreError(error) {
+  const code = error?.code;
+  const message = error?.message || 'Unknown error';
+  
+  if (code === 'permission-denied' || code === 'PERMISSION_DENIED') {
+    return 'Permission denied. You may not be signed in or your account does not have access.';
+  }
+  
+  if (code === 'unavailable' || message.includes('unavailable')) {
+    return 'Service unavailable. Please check your internet connection and try again.';
+  }
+  
+  if (code === 'failed-precondition' || message.includes('index')) {
+    return 'Database index required. Please contact support.';
+  }
+  
+  if (message.includes('agencyId') || message.includes('agency')) {
+    return 'Agency not found. Please sign in again.';
+  }
+  
+  return message || 'Failed to load customers. Please try again.';
 }
 
 function renderCustomers() {

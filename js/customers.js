@@ -175,6 +175,15 @@ export async function getCustomerByPhone(phoneE164) {
  */
 export async function listCustomers(filters = {}) {
   try {
+    // Verify agencyId is available
+    if (!userStore.agencyId) {
+      throw new Error('No agencyId available. Please sign in again.');
+    }
+    
+    console.log('[customers.js] Listing customers for agencyId:', userStore.agencyId);
+    
+    // Build query without orderBy first (safer - avoids index issues)
+    // We'll sort client-side instead
     let q = query(getCustomersRef());
     
     if (filters.assignedToUid) {
@@ -193,22 +202,34 @@ export async function listCustomers(filters = {}) {
       q = query(q, where('fullName', '<=', filters.search + '\uf8ff'));
     }
     
-    // Default sort by createdAt descending (newest first)
-    // Use createdAt instead of lastContactAt so new customers appear
-    q = query(q, orderBy('createdAt', 'desc'));
-    
     if (filters.limit) {
       q = query(q, limit(filters.limit));
     }
     
+    console.log('[customers.js] Executing query...');
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    console.log('[customers.js] Query returned', snapshot.docs.length, 'documents');
+    
+    let customers = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort client-side by createdAt descending (newest first)
+    // Handle cases where createdAt might be missing or in different formats
+    customers.sort((a, b) => {
+      const aTime = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() ?? (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+      const bTime = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() ?? (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+      return bTime - aTime; // Descending order
+    });
+    
+    return customers;
   } catch (error) {
-    console.error('Error listing customers:', error);
-    toast(error.message || 'Failed to load customers', 'error');
+    console.error('[customers.js] Error listing customers:', error);
+    console.error('[customers.js] Error code:', error.code);
+    console.error('[customers.js] Error message:', error.message);
+    console.error('[customers.js] AgencyId at error:', userStore.agencyId);
+    // Don't show toast here - let the caller handle UI feedback
     throw error;
   }
 }
