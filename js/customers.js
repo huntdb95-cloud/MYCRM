@@ -244,7 +244,28 @@ export async function listCustomers(filters = {}) {
  */
 export async function deleteCustomer(customerId) {
   try {
-    const customerRef = doc(getCustomersRef(), customerId);
+    // Step 1: Verify auth
+    if (!auth?.currentUser) {
+      throw new Error('You must be signed in to delete customers');
+    }
+    
+    const uid = auth.currentUser.uid;
+    
+    // Step 2: Verify agencyId is available
+    if (!userStore.agencyId) {
+      throw new Error('Agency ID not available. Please refresh and try again.');
+    }
+    
+    const agencyId = userStore.agencyId;
+    
+    // Step 3: Verify role (admin or agent required)
+    const role = userStore.role;
+    if (role !== 'admin' && role !== 'agent') {
+      throw new Error('You do not have permission to delete customers. Only admins and agents can delete customers.');
+    }
+    
+    // Step 4: Get customer reference using correct path
+    const customerRef = doc(db, 'agencies', agencyId, 'customers', customerId);
     const customerSnap = await getDoc(customerRef);
     
     if (!customerSnap.exists()) {
@@ -253,18 +274,69 @@ export async function deleteCustomer(customerId) {
     
     const customerData = customerSnap.data();
     
-    // Remove phone index entry
+    console.log('[customers.js] DELETE CUSTOMER START', {
+      uid,
+      agencyId,
+      customerId,
+      role,
+      hasPhone: !!customerData.phoneE164
+    });
+    
+    // Step 5: Delete subcollections first (policies and notes)
+    const policiesRef = collection(db, 'agencies', agencyId, 'customers', customerId, 'policies');
+    const notesRef = collection(db, 'agencies', agencyId, 'customers', customerId, 'notes');
+    
+    const [policiesSnap, notesSnap] = await Promise.all([
+      getDocs(policiesRef),
+      getDocs(notesRef)
+    ]);
+    
+    // Use batch to delete customer, subcollections, and phone index atomically
+    const batch = writeBatch(db);
+    
+    // Delete all policies
+    policiesSnap.forEach(policyDoc => {
+      batch.delete(policyDoc.ref);
+    });
+    
+    // Delete all notes
+    notesSnap.forEach(noteDoc => {
+      batch.delete(noteDoc.ref);
+    });
+    
+    // Remove phone index entry if exists
     if (customerData.phoneE164) {
-      await deleteDoc(getPhoneIndexRef(customerData.phoneE164));
+      const phoneIndexRef = doc(db, 'agencies', agencyId, 'phoneIndex', customerData.phoneE164);
+      batch.delete(phoneIndexRef);
     }
     
-    // Delete customer
-    await deleteDoc(customerRef);
+    // Delete customer document
+    batch.delete(customerRef);
     
-    toast('Customer deleted successfully', 'success');
+    // Commit batch
+    await batch.commit();
+    
+    console.log('[customers.js] DELETE CUSTOMER SUCCESS', {
+      uid,
+      agencyId,
+      customerId,
+      policiesDeleted: policiesSnap.size,
+      notesDeleted: notesSnap.size
+    });
+    
+    // Toast handled by caller
   } catch (error) {
-    console.error('Error deleting customer:', error);
-    toast(error.message || 'Failed to delete customer', 'error');
+    console.error('[customers.js] DELETE CUSTOMER FAILED', {
+      uid: auth?.currentUser?.uid,
+      agencyId: userStore.agencyId,
+      customerId,
+      role: userStore.role,
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Toast handled by caller
     throw error;
   }
 }

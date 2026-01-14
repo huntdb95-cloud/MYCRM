@@ -680,6 +680,11 @@ function renderCustomers() {
     return;
   }
   
+  // Check if user has permission to delete (admin or agent only)
+  const currentUser = auth?.currentUser;
+  const isSignedIn = !!currentUser;
+  const canDelete = isSignedIn && (userStore.role === 'admin' || userStore.role === 'agent');
+  
   customersList.innerHTML = `
     <table class="table">
       <thead>
@@ -693,7 +698,13 @@ function renderCustomers() {
         </tr>
       </thead>
       <tbody>
-        ${customers.map(c => `
+        ${customers.map(c => {
+          const safeName = (c.fullName || 'Unknown').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const deleteButton = canDelete
+            ? `<button class="btn btn-text btn-danger" onclick="deleteCustomerHandler('${c.id}', '${safeName}')" style="padding: 4px 8px;">Delete</button>`
+            : `<button class="btn btn-text btn-danger" disabled title="You don't have permission to delete customers." style="padding: 4px 8px; opacity: 0.5;">Delete</button>`;
+          
+          return `
           <tr>
             <td>
               <a href="/customer.html?id=${c.id}" style="color: var(--accent); text-decoration: none; font-weight: 600;">
@@ -706,10 +717,11 @@ function renderCustomers() {
             <td>${c.lastContactAt ? formatDateTime(c.lastContactAt) : '—'}</td>
             <td>
               <button class="btn btn-text" onclick="editCustomer('${c.id}')" style="padding: 4px 8px;">Edit</button>
-              <button class="btn btn-text btn-danger" onclick="deleteCustomerHandler('${c.id}', '${(c.fullName || 'Unknown').replace(/'/g, "\\'")}')" style="padding: 4px 8px;">Delete</button>
+              ${deleteButton}
             </td>
           </tr>
-        `).join('')}
+        `;
+        }).join('')}
       </tbody>
     </table>
   `;
@@ -732,10 +744,37 @@ window.editCustomer = async function(customerId) {
 
 window.deleteCustomerHandler = async function(customerId, customerName) {
   try {
-    // Show confirmation modal with customer name
+    // Step 1: Verify auth
+    const currentUser = auth?.currentUser;
+    if (!currentUser) {
+      toast('You must be signed in to delete customers', 'error');
+      return;
+    }
+    
+    // Step 2: Verify agencyId
+    if (!userStore.agencyId) {
+      toast('Agency ID not available. Please refresh and try again.', 'error');
+      return;
+    }
+    
+    // Step 3: Verify role (admin or agent required)
+    const role = userStore.role;
+    if (role !== 'admin' && role !== 'agent') {
+      toast('You do not have permission to delete customers. Only admins and agents can delete customers.', 'error');
+      return;
+    }
+    
+    // Step 4: Show confirmation modal with customer name and warning about policies
     const confirmed = await showModal(
       'Delete Customer',
-      `<p>Are you sure you want to delete <strong>${customerName}</strong>?</p><p style="color: var(--danger); margin-top: 8px;">This action cannot be undone.</p>`,
+      `<p>Are you sure you want to delete <strong>${customerName}</strong>?</p>
+       <p style="color: var(--danger); margin-top: 8px; font-weight: 600;">This will permanently delete:</p>
+       <ul style="color: var(--danger); margin-top: 8px; padding-left: 20px;">
+         <li>The customer record</li>
+         <li>All associated policies</li>
+         <li>All associated data</li>
+       </ul>
+       <p style="color: var(--danger); margin-top: 8px;">This action cannot be undone.</p>`,
       [
         { label: 'Cancel', value: false },
         { label: 'Delete', value: true, class: 'btn-danger' }
@@ -744,13 +783,32 @@ window.deleteCustomerHandler = async function(customerId, customerName) {
     
     if (!confirmed) return;
     
-    console.log('[customers-page.js] Deleting customer:', customerId);
+    console.log('[customers-page.js] DELETE CUSTOMER REQUEST', {
+      uid: currentUser.uid,
+      agencyId: userStore.agencyId,
+      customerId,
+      role
+    });
+    
     await deleteCustomer(customerId);
     await loadCustomers();
     toast(`Customer "${customerName}" deleted successfully`, 'success');
   } catch (error) {
-    console.error('Error deleting customer:', error);
-    const errorMsg = error?.message || 'Failed to delete customer';
+    console.error('[customers-page.js] DELETE CUSTOMER ERROR', {
+      customerId,
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Show user-friendly error message
+    let errorMsg = 'Failed to delete customer';
+    if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
+      errorMsg = 'Permission denied. You may not have access to delete customers.';
+    } else if (error.message) {
+      errorMsg = error.message;
+    }
+    
     toast(errorMsg, 'error');
   }
 };
