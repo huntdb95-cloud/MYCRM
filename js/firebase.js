@@ -3,7 +3,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, enableIndexedDbPersistence, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-functions.js";
 
@@ -26,6 +26,24 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
+
+// Enable Firestore offline persistence for better performance and offline support
+// This caches Firestore data locally, reducing reads and enabling offline access
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // Multiple tabs open, persistence can only be enabled in one tab at a time
+      console.warn('[firebase] Firestore persistence already enabled in another tab');
+    } else if (err.code === 'unimplemented') {
+      // Browser doesn't support persistence
+      console.warn('[firebase] Firestore persistence not supported in this browser');
+    } else {
+      console.warn('[firebase] Failed to enable Firestore persistence:', err);
+    }
+  });
+} catch (error) {
+  console.warn('[firebase] Error enabling Firestore persistence:', error);
+}
 
 // Export serverTimestamp for use in other modules
 export { serverTimestamp };

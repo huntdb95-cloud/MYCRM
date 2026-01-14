@@ -14,8 +14,24 @@ import {
   limit,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-import { getCachedMetrics, setCachedMetrics, getCacheAge } from './lib/cache.js';
-import { getMetrics, recalculateRenewals } from './lib/metrics.js';
+import { getDashboardSnapshot, getCacheAge, clearDashboardCache } from './lib/dashboardService.js';
+
+// Helper to check if cached snapshot exists (synchronous)
+function hasCachedSnapshot(agencyId) {
+  try {
+    const key = `dashboardSnapshot:${agencyId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const cached = JSON.parse(stored);
+      const now = Date.now();
+      const age = now - cached.fetchedAt;
+      return age < cached.ttlMs;
+    }
+  } catch (error) {
+    // Ignore
+  }
+  return false;
+}
 
 // Initialize
 async function init() {
@@ -135,6 +151,8 @@ function setupUI() {
 }
 
 async function loadDashboard() {
+  const loadStartTime = performance.now();
+  
   try {
     const agencyId = userStore.agencyId;
     if (!agencyId) {
@@ -142,62 +160,42 @@ async function loadDashboard() {
       return;
     }
     
-    // Check cache first for instant render
-    const cachedMetrics = getCachedMetrics(agencyId);
-    if (cachedMetrics) {
-      // Render cached metrics immediately
-      updateSnapshotCard('totalCustomers', cachedMetrics.totalCustomers, cachedMetrics.totalCustomers === 0);
-      updateSnapshotCard('totalPremium', formatCurrency(cachedMetrics.totalPremium), cachedMetrics.totalPremium === 0);
-      updateSnapshotCard('renewalsCount', cachedMetrics.renewalsNext30Days, cachedMetrics.renewalsNext30Days === 0);
-      
-      // Show cache age if available
-      const cacheAge = getCacheAge(agencyId);
-      if (cacheAge !== null && cacheAge < 60) {
-        // Optionally show "Updated Xs ago" - can be added to UI later
-      }
-    } else {
-      // Show loading skeleton
+    // Check if we have cached data - if so, don't show loading states
+    const hasCachedData = hasCachedSnapshot(agencyId);
+    
+    if (!hasCachedData) {
+      // Only show loading states on first load (no cache)
       updateSnapshotCard('totalCustomers', '—', false);
       updateSnapshotCard('totalPremium', '—', false);
       updateSnapshotCard('renewalsCount', '—', false);
     }
     
-    // Load metrics from Firestore (O(1) read)
-    const metrics = await getMetrics(agencyId);
+    // Get dashboard snapshot (uses cache internally, returns cached immediately if available)
+    const snapshot = await getDashboardSnapshot(agencyId, userStore.uid, userStore.role);
     
-    // Update snapshot cards with fresh data
-    updateSnapshotCard('totalCustomers', metrics.totalCustomers, metrics.totalCustomers === 0);
-    updateSnapshotCard('totalPremium', formatCurrency(metrics.totalPremium), metrics.totalPremium === 0);
-    updateSnapshotCard('renewalsCount', metrics.renewalsNext30Days, metrics.renewalsNext30Days === 0);
-    
-    // Cache the metrics
-    setCachedMetrics(agencyId, metrics);
-    
-    // Load widgets in parallel (these don't need to block metrics display)
-    const [
-      renewalsSnapshot,
-      tasksSnapshot,
-      customersSnapshot,
-      conversationsSnapshot
-    ] = await Promise.all([
-      getRenewals(agencyId),
-      getTasksDueSoon(agencyId),
-      getCustomers(agencyId), // Still needed for cross-sell widget
-      getRecentConversations(agencyId)
-    ]);
+    // Render snapshot cards immediately
+    updateSnapshotCard('totalCustomers', snapshot.totalCustomers, snapshot.totalCustomers === 0);
+    updateSnapshotCard('totalPremium', formatCurrency(snapshot.totalPremium), snapshot.totalPremium === 0);
+    updateSnapshotCard('renewalsCount', snapshot.renewals, snapshot.renewals === 0);
     
     // Render widgets
-    renderRenewalsWidget(renewalsSnapshot, agencyId);
-    renderTasksWidget(tasksSnapshot);
-    renderCrosssellWidget(customersSnapshot, agencyId);
-    renderConversationsWidget(conversationsSnapshot, agencyId);
+    renderRenewalsWidget(snapshot.renewalsSoon, agencyId);
+    renderTasksWidget(snapshot.tasksDueSoon || []);
+    renderCrosssellWidget(snapshot.crossSellOpportunities || [], agencyId);
+    renderConversationsWidget(snapshot.recentConversations || [], agencyId);
+    
+    // Update "last updated" indicator
+    updateLastUpdatedIndicator(agencyId);
     
     // Show/hide getting started banner
-    const hasData = metrics.totalCustomers > 0 || metrics.totalPremium > 0;
+    const hasData = snapshot.totalCustomers > 0 || snapshot.totalPremium > 0;
     const gettingStartedBanner = document.getElementById('gettingStartedBanner');
     if (gettingStartedBanner) {
       gettingStartedBanner.classList.toggle('hidden', hasData);
     }
+    
+    const loadDuration = performance.now() - loadStartTime;
+    console.log(`[app.js] Dashboard loaded in ${loadDuration.toFixed(2)}ms`);
     
   } catch (error) {
     console.error('Error loading dashboard:', error);
@@ -205,218 +203,26 @@ async function loadDashboard() {
   }
 }
 
-// Firestore queries
-async function getCustomers(agencyId) {
-  const customersRef = collection(db, 'agencies', agencyId, 'customers');
-  return await getDocs(customersRef);
-}
-
-async function getPolicies(agencyId) {
-  // Query all policies across all customers
-  // Note: This requires a collection group query which needs an index
-  // For now, we'll query policies from customers we have
-  const customersRef = collection(db, 'agencies', agencyId, 'customers');
-  const customersSnapshot = await getDocs(customersRef);
+// Update "last updated" indicator
+function updateLastUpdatedIndicator(agencyId) {
+  const cacheAge = getCacheAge(agencyId);
+  const indicator = document.getElementById('dashboardLastUpdated');
   
-  const allPolicies = [];
-  for (const customerDoc of customersSnapshot.docs) {
-    const policiesRef = collection(db, 'agencies', agencyId, 'customers', customerDoc.id, 'policies');
-    const policiesSnapshot = await getDocs(policiesRef);
-    policiesSnapshot.forEach(doc => {
-      allPolicies.push({ id: doc.id, customerId: customerDoc.id, ...doc.data() });
-    });
-  }
-  
-  return allPolicies;
-}
-
-async function getRenewals(agencyId) {
-  try {
-    const now = new Date();
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(now.getDate() + 30);
-    
-    const nowTimestamp = Timestamp.fromDate(now);
-    const thirtyDaysTimestamp = Timestamp.fromDate(thirtyDaysFromNow);
-    
-    // Use collectionGroup query with denormalized agencyId field
-    // This is a single query instead of N+1
-    const policiesRef = collectionGroup(db, 'policies');
-    const q = query(
-      policiesRef,
-      where('agencyId', '==', agencyId),
-      where('status', '==', 'active'),
-      where('expirationDate', '>=', nowTimestamp),
-      where('expirationDate', '<=', thirtyDaysTimestamp),
-      orderBy('expirationDate', 'asc'),
-      limit(8)
-    );
-    
-    const snapshot = await getDocs(q);
-    
-    // Fetch customer names for the renewals
-    const renewals = [];
-    const customerIds = new Set();
-    const policies = [];
-    
-    snapshot.forEach(doc => {
-      const policy = doc.data();
-      // Try denormalized customerId first, then parse from document path
-      let customerId = policy.customerId;
-      if (!customerId && doc.ref && doc.ref.parent && doc.ref.parent.parent) {
-        // Parse from path: agencies/{agencyId}/customers/{customerId}/policies/{policyId}
-        const pathParts = doc.ref.path.split('/');
-        const customerIndex = pathParts.indexOf('customers');
-        if (customerIndex >= 0 && customerIndex + 1 < pathParts.length) {
-          customerId = pathParts[customerIndex + 1];
-        }
-      }
-      if (customerId) {
-        customerIds.add(customerId);
-        policies.push({
-          id: doc.id,
-          customerId,
-          ...policy
-        });
-      }
-    });
-    
-    // Batch fetch customer names
-    const customerNames = {};
-    if (customerIds.size > 0) {
-      const customersRef = collection(db, 'agencies', agencyId, 'customers');
-      const customerPromises = Array.from(customerIds).map(async (customerId) => {
-        try {
-          const { doc: docFn, getDoc } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
-          const customerRef = docFn(db, 'agencies', agencyId, 'customers', customerId);
-          const customerSnap = await getDoc(customerRef);
-          if (customerSnap.exists()) {
-            const customerData = customerSnap.data();
-            customerNames[customerId] = customerData.fullName || customerData.insuredName || 'Unknown';
-          }
-        } catch (error) {
-          console.warn(`[app.js] Failed to fetch customer ${customerId}:`, error);
-          customerNames[customerId] = 'Unknown';
-        }
-      });
-      await Promise.all(customerPromises);
+  if (indicator && cacheAge !== null) {
+    let text = '';
+    if (cacheAge < 60) {
+      text = `Updated ${cacheAge}s ago`;
+    } else if (cacheAge < 3600) {
+      const minutes = Math.floor(cacheAge / 60);
+      text = `Updated ${minutes}m ago`;
+    } else {
+      const hours = Math.floor(cacheAge / 3600);
+      text = `Updated ${hours}h ago`;
     }
-    
-    // Build renewals array with customer names
-    policies.forEach(policy => {
-      renewals.push({
-        ...policy,
-        customerName: customerNames[policy.customerId] || 'Unknown'
-      });
-    });
-    
-    return renewals;
-  } catch (error) {
-    // If collectionGroup query fails (e.g., index not created), fall back to old method
-    console.warn('[app.js] CollectionGroup query failed, falling back to old method:', error);
-    return getRenewalsFallback(agencyId);
-  }
-}
-
-// Fallback method (old N+1 approach) for when collectionGroup index isn't ready
-async function getRenewalsFallback(agencyId) {
-  const now = new Date();
-  const thirtyDaysFromNow = new Date();
-  thirtyDaysFromNow.setDate(now.getDate() + 30);
-  
-  const customersRef = collection(db, 'agencies', agencyId, 'customers');
-  const customersSnapshot = await getDocs(customersRef);
-  
-  const renewals = [];
-  for (const customerDoc of customersSnapshot.docs) {
-    const policiesRef = collection(db, 'agencies', agencyId, 'customers', customerDoc.id, 'policies');
-    const policiesSnapshot = await getDocs(policiesRef);
-    
-    policiesSnapshot.forEach(doc => {
-      const policy = doc.data();
-      // Check for expirationDate, renewalDate, or effectiveTo
-      const expirationDate = policy.expirationDate || policy.renewalDate || policy.effectiveTo;
-      if (policy.status === 'active' && expirationDate) {
-        const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate);
-        if (expDate >= now && expDate <= thirtyDaysFromNow) {
-          renewals.push({
-            id: doc.id,
-            customerId: customerDoc.id,
-            customerName: customerDoc.data().fullName || customerDoc.data().insuredName || 'Unknown',
-            ...policy
-          });
-        }
-      }
-    });
-  }
-  
-  // Sort by expiration date
-  renewals.sort((a, b) => {
-    const dateA = (a.expirationDate || a.renewalDate || a.effectiveTo);
-    const dateB = (b.expirationDate || b.renewalDate || b.effectiveTo);
-    const dateAVal = dateA.toDate ? dateA.toDate() : new Date(dateA);
-    const dateBVal = dateB.toDate ? dateB.toDate() : new Date(dateB);
-    return dateAVal - dateBVal;
-  });
-  
-  return renewals.slice(0, 8);
-}
-
-async function getTasksDueSoon(agencyId) {
-  const now = new Date();
-  const sevenDaysFromNow = new Date();
-  sevenDaysFromNow.setDate(now.getDate() + 7);
-  
-  const tasksRef = collection(db, 'agencies', agencyId, 'tasks');
-  
-  // Query all tasks and filter in memory (simpler than complex queries)
-  // Note: For production, consider creating a composite index:
-  // Collection: tasks, Fields: status (ASC), dueAt (ASC)
-  // Or: assignedToUid (ASC), status (ASC), dueAt (ASC)
-  let q;
-  if (userStore.role !== 'admin') {
-    q = query(tasksRef, where('assignedToUid', '==', userStore.uid));
-  } else {
-    q = query(tasksRef);
-  }
-  
-  try {
-    const snapshot = await getDocs(q);
-    const tasks = [];
-    snapshot.forEach(doc => {
-      const task = { id: doc.id, ...doc.data() };
-      // Filter out done tasks and check due date
-      if (task.status !== 'done' && task.dueAt) {
-        const dueDate = task.dueAt.toDate ? task.dueAt.toDate() : new Date(task.dueAt);
-        if (dueDate <= sevenDaysFromNow && dueDate >= now) {
-          tasks.push(task);
-        }
-      }
-    });
-    // Sort by due date
-    tasks.sort((a, b) => {
-      const dateA = a.dueAt.toDate ? a.dueAt.toDate() : new Date(a.dueAt);
-      const dateB = b.dueAt.toDate ? b.dueAt.toDate() : new Date(b.dueAt);
-      return dateA - dateB;
-    });
-    return tasks.slice(0, 8);
-  } catch (error) {
-    // If query fails, return empty array
-    console.warn('Tasks query failed:', error);
-    return [];
-  }
-}
-
-async function getRecentConversations(agencyId) {
-  const conversationsRef = collection(db, 'agencies', agencyId, 'conversations');
-  const q = query(conversationsRef, orderBy('lastMessageAt', 'desc'), limit(8));
-  
-  try {
-    return await getDocs(q);
-  } catch (error) {
-    // If query fails (index not created), return empty
-    console.warn('Conversations query failed (index may be needed):', error);
-    return { size: 0, forEach: () => {} };
+    indicator.textContent = text;
+    indicator.style.display = 'block';
+  } else if (indicator) {
+    indicator.style.display = 'none';
   }
 }
 
@@ -453,10 +259,11 @@ function renderRenewalsWidget(renewals, agencyId) {
   widget.innerHTML = renewals.map(renewal => {
     const expirationDate = renewal.expirationDate || renewal.renewalDate || renewal.effectiveTo;
     const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate);
+    const customerName = renewal.customerName || 'Unknown';
     return `
       <div class="list-item" onclick="window.location.href='/customer.html?id=${renewal.customerId}'">
         <div class="list-item-main">
-          <div class="list-item-title">${renewal.customerName}</div>
+          <div class="list-item-title">${customerName}</div>
           <div class="list-item-subtitle">${renewal.policyType || renewal.carrier || 'Policy'} • Expires ${formatDate(expDate)}</div>
         </div>
         <div class="list-item-meta">${formatCurrency(renewal.premium || 0)}</div>
@@ -493,23 +300,12 @@ function renderTasksWidget(tasks) {
   }).join('');
 }
 
-async function renderCrosssellWidget(customersSnapshot, agencyId) {
+async function renderCrosssellWidget(customers, agencyId) {
   const widget = document.getElementById('crosssellWidget');
   if (!widget) return;
   
-  // Get customers with crossSellScore or policyCount == 1
-  const customers = [];
-  customersSnapshot.forEach(doc => {
-    const data = doc.data();
-    if (data.crossSellScore > 0 || data.policyCount === 1) {
-      customers.push({ id: doc.id, ...data });
-    }
-  });
-  
-  // Sort by crossSellScore descending
-  customers.sort((a, b) => (b.crossSellScore || 0) - (a.crossSellScore || 0));
-  
-  if (customers.length === 0) {
+  // customers is already an array from dashboardService
+  if (!customers || customers.length === 0) {
     widget.innerHTML = `
       <p class="empty-state">
         No cross-sell opportunities yet.<br/>
@@ -519,7 +315,7 @@ async function renderCrosssellWidget(customersSnapshot, agencyId) {
     return;
   }
   
-  widget.innerHTML = customers.slice(0, 8).map(customer => {
+  widget.innerHTML = customers.map(customer => {
     return `
       <div class="list-item" onclick="window.location.href='/customer.html?id=${customer.id}'">
         <div class="list-item-main">
@@ -532,11 +328,12 @@ async function renderCrosssellWidget(customersSnapshot, agencyId) {
   }).join('');
 }
 
-async function renderConversationsWidget(conversationsSnapshot, agencyId) {
+async function renderConversationsWidget(conversations, agencyId) {
   const widget = document.getElementById('conversationsWidget');
   if (!widget) return;
   
-  if (conversationsSnapshot.size === 0) {
+  // conversations is already an array with customerName from dashboardService
+  if (!conversations || conversations.length === 0) {
     widget.innerHTML = `
       <p class="empty-state">
         No conversations yet.<br/>
@@ -546,31 +343,13 @@ async function renderConversationsWidget(conversationsSnapshot, agencyId) {
     return;
   }
   
-  // Get customer names for conversations
-  const customerIds = [];
-  const conversations = [];
-  conversationsSnapshot.forEach(doc => {
-    const data = doc.data();
-    customerIds.push(data.customerId);
-    conversations.push({ id: doc.id, ...data });
-  });
-  
-  // Fetch customer names in batch
-  const customerNames = {};
-  const customersRef = collection(db, 'agencies', agencyId, 'customers');
-  const customersSnapshot = await getDocs(customersRef);
-  customersSnapshot.forEach(doc => {
-    if (customerIds.includes(doc.id)) {
-      customerNames[doc.id] = doc.data().fullName || 'Unknown';
-    }
-  });
-  
   widget.innerHTML = conversations.map(conv => {
     const lastMessageAt = conv.lastMessageAt ? (conv.lastMessageAt.toDate ? conv.lastMessageAt.toDate() : new Date(conv.lastMessageAt)) : null;
+    const customerName = conv.customerName || 'Unknown Customer';
     return `
       <div class="list-item" onclick="window.location.href='/customer.html?id=${conv.customerId}#messages'">
         <div class="list-item-main">
-          <div class="list-item-title">${customerNames[conv.customerId] || 'Unknown Customer'}</div>
+          <div class="list-item-title">${customerName}</div>
           <div class="list-item-subtitle">${conv.lastMessageSnippet || 'No messages'}</div>
         </div>
         <div class="list-item-meta">${lastMessageAt ? formatDateTime(lastMessageAt) : '—'}</div>

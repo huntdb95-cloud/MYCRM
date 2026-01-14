@@ -1,6 +1,6 @@
-// cache.js - Dashboard metrics cache with sessionStorage persistence
+// cache.js - Dashboard metrics cache with localStorage persistence (for cross-page navigation)
 
-const DEFAULT_TTL_MS = 60 * 1000; // 60 seconds default
+const DEFAULT_TTL_MS = 3 * 60 * 1000; // 3 minutes default TTL
 
 // In-memory cache
 const memoryCache = {};
@@ -23,7 +23,8 @@ export function isFresh(fetchedAt, ttlMs = DEFAULT_TTL_MS) {
 }
 
 /**
- * Get cached metrics from memory or sessionStorage
+ * Get cached metrics from memory or localStorage
+ * Uses localStorage instead of sessionStorage to persist across page refreshes
  */
 export function getCachedMetrics(agencyId) {
   const key = getCacheKey(agencyId);
@@ -38,9 +39,9 @@ export function getCachedMetrics(agencyId) {
     delete memoryCache[key];
   }
   
-  // Try sessionStorage
+  // Try localStorage (persists across page refreshes)
   try {
-    const stored = sessionStorage.getItem(key);
+    const stored = localStorage.getItem(key);
     if (stored) {
       const cached = JSON.parse(stored);
       if (isFresh(cached.fetchedAt, cached.ttlMs)) {
@@ -48,18 +49,18 @@ export function getCachedMetrics(agencyId) {
         memoryCache[key] = cached;
         return cached.data;
       }
-      // Expired, remove from sessionStorage
-      sessionStorage.removeItem(key);
+      // Expired, remove from localStorage
+      localStorage.removeItem(key);
     }
   } catch (error) {
-    console.warn('[cache.js] Failed to read from sessionStorage:', error);
+    console.warn('[cache.js] Failed to read from localStorage:', error);
   }
   
   return null;
 }
 
 /**
- * Set cached metrics in memory and sessionStorage
+ * Set cached metrics in memory and localStorage
  */
 export function setCachedMetrics(agencyId, metrics, ttlMs = DEFAULT_TTL_MS) {
   const key = getCacheKey(agencyId);
@@ -72,12 +73,12 @@ export function setCachedMetrics(agencyId, metrics, ttlMs = DEFAULT_TTL_MS) {
   // Store in memory
   memoryCache[key] = cached;
   
-  // Store in sessionStorage
+  // Store in localStorage (persists across page refreshes)
   try {
-    sessionStorage.setItem(key, JSON.stringify(cached));
+    localStorage.setItem(key, JSON.stringify(cached));
   } catch (error) {
-    console.warn('[cache.js] Failed to write to sessionStorage:', error);
-    // Continue without sessionStorage - memory cache still works
+    console.warn('[cache.js] Failed to write to localStorage:', error);
+    // Continue without localStorage - memory cache still works
   }
 }
 
@@ -88,9 +89,9 @@ export function clearCachedMetrics(agencyId) {
   const key = getCacheKey(agencyId);
   delete memoryCache[key];
   try {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
   } catch (error) {
-    console.warn('[cache.js] Failed to clear from sessionStorage:', error);
+    console.warn('[cache.js] Failed to clear from localStorage:', error);
   }
 }
 
@@ -106,9 +107,9 @@ export function getCacheAge(agencyId) {
     return Math.floor(age / 1000);
   }
   
-  // Check sessionStorage
+  // Check localStorage
   try {
-    const stored = sessionStorage.getItem(key);
+    const stored = localStorage.getItem(key);
     if (stored) {
       const cached = JSON.parse(stored);
       const age = Date.now() - cached.fetchedAt;

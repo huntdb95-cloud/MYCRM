@@ -3,6 +3,7 @@
 import { db } from '../firebase.js';
 import { doc, getDoc, setDoc, updateDoc, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { clearCachedMetrics } from './cache.js';
+import { clearDashboardCache } from './dashboardService.js';
 
 /**
  * Get metrics document reference
@@ -40,8 +41,9 @@ export async function incrementCustomerCount(agencyId, delta = 1) {
       totalCustomers: increment(delta),
       updatedAt: serverTimestamp(),
     });
-    // Clear cache to force refresh
+    // Clear caches to force refresh
     clearCachedMetrics(agencyId);
+    clearDashboardCache(agencyId);
   } catch (error) {
     console.error('[metrics.js] Error incrementing customer count:', error);
     // Don't throw - metrics update failure shouldn't break customer operations
@@ -59,8 +61,9 @@ export async function updatePremium(agencyId, delta) {
       totalPremium: increment(delta),
       updatedAt: serverTimestamp(),
     });
-    // Clear cache to force refresh
+    // Clear caches to force refresh
     clearCachedMetrics(agencyId);
+    clearDashboardCache(agencyId);
   } catch (error) {
     console.error('[metrics.js] Error updating premium:', error);
     // Don't throw - metrics update failure shouldn't break policy operations
@@ -104,8 +107,9 @@ export async function recalculateRenewals(agencyId) {
       updatedAt: serverTimestamp(),
     });
     
-    // Clear cache to force refresh
+    // Clear caches to force refresh
     clearCachedMetrics(agencyId);
+    clearDashboardCache(agencyId);
     
     return count;
   } catch (error) {
