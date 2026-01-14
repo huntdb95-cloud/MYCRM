@@ -35,17 +35,16 @@ service cloud.firestore {
       return userDoc != null && userDoc.data != null ? userDoc.data.role : null;
     }
     
-    // Check if user has required role
-    // Note: In Firestore rules, we can't use 'in' operator with arrays
-    // So we check each role individually
-    function hasRole(agencyId, roles) {
+    // Check if user has required role (admin or agent)
+    function isAdminOrAgent(agencyId) {
       let role = getUserRole(agencyId);
-      if (role == null) {
-        return false;
-      }
-      // Check if role matches any value in the roles array
-      // roles[0] and roles[1] are the first two roles passed
-      return (role == roles[0]) || (role == roles[1]);
+      return role != null && (role == 'admin' || role == 'agent');
+    }
+    
+    // Check if user has assistant role
+    function isAssistant(agencyId) {
+      let role = getUserRole(agencyId);
+      return role != null && role == 'assistant';
     }
     
     // ============================================================================
@@ -110,23 +109,23 @@ service cloud.firestore {
         // Only agents and admins can create/update customers
         allow create, update: if signedIn() && 
           isAgencyMember(agencyId) &&
-          hasRole(agencyId, ['admin', 'agent']);
+          isAdminOrAgent(agencyId);
         
         // Only admins and agents can delete
         allow delete: if signedIn() && 
-          hasRole(agencyId, ['admin', 'agent']);
+          isAdminOrAgent(agencyId);
         
         // Notes subcollection
         match /notes/{noteId} {
           allow read: if signedIn() && isAgencyMember(agencyId);
           allow create: if signedIn() && isAgencyMember(agencyId);
-          allow update, delete: if signedIn() && hasRole(agencyId, ['admin', 'agent']);
+          allow update, delete: if signedIn() && isAdminOrAgent(agencyId);
         }
         
         // Policies subcollection
         match /policies/{policyId} {
           allow read: if signedIn() && isAgencyMember(agencyId);
-          allow write: if signedIn() && hasRole(agencyId, ['admin', 'agent']);
+          allow write: if signedIn() && isAdminOrAgent(agencyId);
         }
       }
       
@@ -142,7 +141,7 @@ service cloud.firestore {
         match /messages/{messageId} {
           allow read: if signedIn() && isAgencyMember(agencyId);
           allow create: if signedIn() && isAgencyMember(agencyId);
-          allow update: if signedIn() && hasRole(agencyId, ['admin', 'agent']);
+          allow update: if signedIn() && isAdminOrAgent(agencyId);
           allow delete: if false; // Keep message history
         }
       }
@@ -158,8 +157,8 @@ service cloud.firestore {
         // Assistants can only delete their own tasks
         // Admins and agents can delete any task
         allow delete: if signedIn() && 
-          (hasRole(agencyId, ['admin', 'agent']) ||
-           (hasRole(agencyId, ['assistant']) && 
+          (isAdminOrAgent(agencyId) ||
+           (isAssistant(agencyId) && 
             resource.data.assignedToUid == request.auth.uid));
       }
       
