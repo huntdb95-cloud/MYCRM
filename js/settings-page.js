@@ -1,10 +1,9 @@
 // settings-page.js - Settings page
 
-import { auth } from './firebase.js';
+import { auth, db } from './firebase.js';
 import { signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { initAuthGuard, userStore } from './auth-guard.js';
 import { initRouter, navigateTo } from './router.js';
-import { db } from './firebase.js';
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { toast } from './ui.js';
 

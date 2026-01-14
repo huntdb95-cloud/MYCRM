@@ -1,6 +1,6 @@
 // customer-page.js - Customer detail page
 
-import { auth } from './firebase.js';
+import { auth, db } from './firebase.js';
 import { signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { initAuthGuard, userStore } from './auth-guard.js';
 import { initRouter, navigateTo, getUrlParam } from './router.js';
@@ -11,7 +11,6 @@ import { listUploads, uploadFile } from './uploads.js';
 import { formatPhone, formatDateTime } from './models.js';
 import { toast } from './ui.js';
 import { collection, doc, getDocs, setDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-import { db } from './firebase.js';
 
 let customerId = null;
 let customer = null;
