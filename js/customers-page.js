@@ -7,7 +7,7 @@ import { initAuthGuard, userStore } from './auth-guard.js';
 import { initRouter, navigateTo, getUrlParam } from './router.js';
 import { listCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomer } from './customers.js';
 import { formatPhone, formatDateTime } from './models.js';
-import { toast, confirm, debounce } from './ui.js';
+import { toast, confirm, debounce, showModal } from './ui.js';
 
 let customers = [];
 
@@ -177,7 +177,7 @@ function renderCustomers() {
             <td>${c.lastContactAt ? formatDateTime(c.lastContactAt) : '—'}</td>
             <td>
               <button class="btn btn-text" onclick="editCustomer('${c.id}')" style="padding: 4px 8px;">Edit</button>
-              <button class="btn btn-text btn-danger" onclick="deleteCustomerHandler('${c.id}')" style="padding: 4px 8px;">Delete</button>
+              <button class="btn btn-text btn-danger" onclick="deleteCustomerHandler('${c.id}', '${(c.fullName || 'Unknown').replace(/'/g, "\\'")}')" style="padding: 4px 8px;">Delete</button>
             </td>
           </tr>
         `).join('')}
@@ -201,15 +201,28 @@ window.editCustomer = async function(customerId) {
   }
 };
 
-window.deleteCustomerHandler = async function(customerId) {
-  const confirmed = await confirm('Are you sure you want to delete this customer?');
-  if (!confirmed) return;
-  
+window.deleteCustomerHandler = async function(customerId, customerName) {
   try {
+    // Show confirmation modal with customer name
+    const confirmed = await showModal(
+      'Delete Customer',
+      `<p>Are you sure you want to delete <strong>${customerName}</strong>?</p><p style="color: var(--danger); margin-top: 8px;">This action cannot be undone.</p>`,
+      [
+        { label: 'Cancel', value: false },
+        { label: 'Delete', value: true, class: 'btn-danger' }
+      ]
+    );
+    
+    if (!confirmed) return;
+    
+    console.log('[customers-page.js] Deleting customer:', customerId);
     await deleteCustomer(customerId);
     await loadCustomers();
+    toast(`Customer "${customerName}" deleted successfully`, 'success');
   } catch (error) {
     console.error('Error deleting customer:', error);
+    const errorMsg = error?.message || 'Failed to delete customer';
+    toast(errorMsg, 'error');
   }
 };
 
@@ -218,10 +231,20 @@ function openCustomerModal(customer = null) {
   const modalTitle = document.getElementById('modalTitle');
   const form = document.getElementById('customerForm');
   const customerId = document.getElementById('customerId');
+  const errorDiv = document.getElementById('customerFormError');
   
   if (modal) modal.classList.remove('hidden');
   if (modalTitle) modalTitle.textContent = customer ? 'Edit Customer' : 'New Customer';
   if (form) form.reset();
+  if (errorDiv) errorDiv.textContent = '';
+  if (errorDiv) errorDiv.style.display = 'none';
+  
+  // Clear any disabled state on submit button
+  const submitBtn = document.getElementById('btnSubmit');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Save';
+  }
   
   if (customer) {
     if (customerId) customerId.value = customer.id;
@@ -231,6 +254,7 @@ function openCustomerModal(customer = null) {
     if (document.getElementById('email')) document.getElementById('email').value = customer.email || '';
     if (document.getElementById('status')) document.getElementById('status').value = customer.status || 'lead';
     if (document.getElementById('source')) document.getElementById('source').value = customer.source || '';
+    if (document.getElementById('notes')) document.getElementById('notes').value = customer.notes || '';
   } else {
     if (customerId) customerId.value = '';
   }
@@ -244,8 +268,25 @@ function closeCustomerModal() {
 async function handleCustomerSubmit(e) {
   e.preventDefault();
   
+  const submitBtn = document.getElementById('btnSubmit');
+  const errorDiv = document.getElementById('customerFormError');
+  const customerId = document.getElementById('customerId').value;
+  
+  // Clear previous errors
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  // Disable submit button and show loading state
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+  }
+  
   try {
-    const customerId = document.getElementById('customerId').value;
+    console.log('[customers-page.js] Submitting customer form, isEdit:', !!customerId);
+    
     const formData = {
       firstName: document.getElementById('firstName').value.trim(),
       lastName: document.getElementById('lastName').value.trim(),
@@ -253,18 +294,42 @@ async function handleCustomerSubmit(e) {
       email: document.getElementById('email').value.trim(),
       status: document.getElementById('status').value,
       source: document.getElementById('source').value.trim(),
+      notes: document.getElementById('notes').value.trim(),
     };
     
+    console.log('[customers-page.js] Form data:', formData);
+    
     if (customerId) {
+      console.log('[customers-page.js] Updating customer:', customerId);
       await updateCustomer(customerId, formData);
     } else {
+      console.log('[customers-page.js] Creating new customer');
       await createCustomer(formData);
     }
     
+    console.log('[customers-page.js] Customer saved successfully');
     closeCustomerModal();
     await loadCustomers();
   } catch (error) {
-    console.error('Error saving customer:', error);
+    console.error('[customers-page.js] Error saving customer:', error);
+    console.error('[customers-page.js] Error stack:', error.stack);
+    
+    const errorMsg = error?.message || 'Failed to save customer. Please try again.';
+    
+    // Show error in form
+    if (errorDiv) {
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
+    }
+    
+    // Also show toast
+    toast(errorMsg, 'error');
+  } finally {
+    // Re-enable submit button
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save';
+    }
   }
 }
 

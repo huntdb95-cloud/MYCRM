@@ -171,8 +171,9 @@ export async function listCustomers(filters = {}) {
       q = query(q, where('fullName', '<=', filters.search + '\uf8ff'));
     }
     
-    // Default sort by lastContactAt descending
-    q = query(q, orderBy('lastContactAt', 'desc'));
+    // Default sort by createdAt descending (newest first)
+    // Use createdAt instead of lastContactAt so new customers appear
+    q = query(q, orderBy('createdAt', 'desc'));
     
     if (filters.limit) {
       q = query(q, limit(filters.limit));

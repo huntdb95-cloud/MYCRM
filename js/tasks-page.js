@@ -10,6 +10,7 @@ import { toast, confirm } from './ui.js';
 
 async function init() {
   try {
+    console.log('[tasks-page.js] Initializing...');
     await initAuthGuard();
     initRouter();
     setupUI();
@@ -20,13 +21,17 @@ async function init() {
       const customerId = getUrlParam('customerId');
       openTaskModal(null, customerId);
     }
+    
+    console.log('[tasks-page.js] Initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize:', error);
+    console.error('[tasks-page.js] Failed to initialize:', error);
     toast('Failed to initialize page', 'error');
   }
 }
 
 function setupUI() {
+  console.log('[tasks-page.js] Setting up UI...');
+  
   // User info
   const userNameEl = document.getElementById('userName');
   const userRoleEl = document.getElementById('userRole');
@@ -58,7 +63,13 @@ function setupUI() {
   // New task button
   const btnNewTask = document.getElementById('btnNewTask');
   if (btnNewTask) {
-    btnNewTask.addEventListener('click', () => openTaskModal());
+    console.log('[tasks-page.js] Add Task button found, attaching handler');
+    btnNewTask.addEventListener('click', () => {
+      console.log('[tasks-page.js] Add Task button clicked');
+      openTaskModal();
+    });
+  } else {
+    console.error('[tasks-page.js] Add Task button (btnNewTask) not found!');
   }
   
   // Modal
@@ -71,7 +82,10 @@ function setupUI() {
   }
   
   if (taskForm) {
+    console.log('[tasks-page.js] Task form found, attaching submit handler');
     taskForm.addEventListener('submit', handleTaskSubmit);
+  } else {
+    console.error('[tasks-page.js] Task form (taskForm) not found!');
   }
   
   if (taskModal) {
@@ -112,10 +126,10 @@ function renderTasks(containerId, tasks) {
   container.innerHTML = tasks.map(task => `
     <div class="list-item" style="cursor: pointer;" onclick="editTask('${task.id}')">
       <div class="list-item-main">
-        <div class="list-item-title">${task.title}</div>
+        <div class="list-item-title">${task.title || 'Untitled Task'}</div>
         <div class="list-item-subtitle">${task.dueAt ? formatDateTime(task.dueAt) : 'No due date'}</div>
       </div>
-      <div class="list-item-meta priority-${task.priority}">${task.priority}</div>
+      <div class="list-item-meta priority-${task.priority || 'med'}">${task.priority || 'med'}</div>
     </div>
   `).join('');
 }
@@ -136,14 +150,27 @@ window.editTask = async function(taskId) {
 };
 
 function openTaskModal(task = null, customerId = null) {
+  console.log('[tasks-page.js] Opening task modal, isEdit:', !!task);
   const modal = document.getElementById('taskModal');
   const modalTitle = document.getElementById('modalTitle');
   const form = document.getElementById('taskForm');
   const taskId = document.getElementById('taskId');
+  const errorDiv = document.getElementById('taskFormError');
   
   if (modal) modal.classList.remove('hidden');
   if (modalTitle) modalTitle.textContent = task ? 'Edit Task' : 'New Task';
   if (form) form.reset();
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  // Clear any disabled state on submit button
+  const submitBtn = document.querySelector('#taskForm button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Save';
+  }
   
   if (task) {
     if (taskId) taskId.value = task.id;
@@ -172,6 +199,22 @@ function closeTaskModal() {
 
 async function handleTaskSubmit(e) {
   e.preventDefault();
+  console.log('[tasks-page.js] Task form submitted');
+  
+  const submitBtn = document.querySelector('#taskForm button[type="submit"]');
+  const errorDiv = document.getElementById('taskFormError');
+  
+  // Clear previous errors
+  if (errorDiv) {
+    errorDiv.textContent = '';
+    errorDiv.style.display = 'none';
+  }
+  
+  // Disable submit button and show loading state
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+  }
   
   try {
     const taskId = document.getElementById('taskId').value;
@@ -183,21 +226,44 @@ async function handleTaskSubmit(e) {
       status: 'open',
     };
     
+    console.log('[tasks-page.js] Submitting task form, isEdit:', !!taskId, 'formData:', formData);
+    
     const customerId = document.getElementById('taskCustomerId')?.value;
     if (customerId) {
       formData.customerId = customerId;
     }
     
     if (taskId) {
+      console.log('[tasks-page.js] Updating task:', taskId);
       await updateTask(taskId, formData);
     } else {
+      console.log('[tasks-page.js] Creating new task');
       await createTask(formData);
     }
     
+    console.log('[tasks-page.js] Task saved successfully');
     closeTaskModal();
     await loadTasks();
   } catch (error) {
-    console.error('Error saving task:', error);
+    console.error('[tasks-page.js] Error saving task:', error);
+    console.error('[tasks-page.js] Error stack:', error.stack);
+    
+    const errorMsg = error?.message || 'Failed to save task. Please try again.';
+    
+    // Show error in form
+    if (errorDiv) {
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
+    }
+    
+    // Also show toast
+    toast(errorMsg, 'error');
+  } finally {
+    // Re-enable submit button
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save';
+    }
   }
 }
 

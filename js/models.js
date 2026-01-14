@@ -72,6 +72,7 @@ export function createCustomerData(formData) {
     phoneE164: phoneE164,
     phoneRaw: formData.phoneRaw || null,
     email: formData.email || null,
+    notes: formData.notes || null,
     address: {
       street: formData.street || null,
       city: formData.city || null,
