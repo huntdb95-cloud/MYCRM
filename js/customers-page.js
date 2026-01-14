@@ -182,6 +182,12 @@ function updateCustomerButtonState() {
     btnNewCustomer.addEventListener('click', openCustomerModal);
   }
   
+  // Upload CSV button
+  const btnUploadCSV = document.getElementById('btnUploadCSV');
+  if (btnUploadCSV) {
+    btnUploadCSV.addEventListener('click', openCSVImportModal);
+  }
+  
   // Search
   const searchInput = document.getElementById('searchInput');
   if (searchInput) {
