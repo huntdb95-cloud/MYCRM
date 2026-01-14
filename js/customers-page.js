@@ -52,6 +52,108 @@ function setupUI() {
   if (userNameEl) userNameEl.textContent = userStore.displayName || userStore.email || 'User';
   if (userRoleEl) userRoleEl.textContent = userStore.role || '—';
   
+  // Auth Debug Indicator
+  updateAuthDebug();
+  updateCustomerButtonState();
+  
+  // Update auth debug when auth state changes
+  if (auth) {
+    auth.onAuthStateChanged(() => {
+      updateAuthDebug();
+      updateCustomerButtonState();
+    });
+  }
+}
+
+// Auth Debug Functions
+function updateAuthDebug() {
+  const authDebug = document.getElementById('authDebug');
+  const authStatus = document.getElementById('authStatus');
+  const authUid = document.getElementById('authUid');
+  const authRole = document.getElementById('authRole');
+  const authAgency = document.getElementById('authAgency');
+  
+  if (!authDebug) return;
+  
+  const currentUser = auth?.currentUser;
+  const isSignedIn = !!currentUser;
+  
+  // Show debug indicator (always show for debugging)
+  authDebug.style.display = 'block';
+  
+  if (authStatus) {
+    authStatus.textContent = isSignedIn ? 'YES' : 'NO';
+    authStatus.style.color = isSignedIn ? 'var(--success)' : 'var(--danger)';
+  }
+  
+  if (authUid) {
+    authUid.textContent = currentUser?.uid || '—';
+  }
+  
+  if (authRole) {
+    authRole.textContent = userStore.role || '—';
+  }
+  
+  if (authAgency) {
+    authAgency.textContent = userStore.agencyId || '—';
+  }
+  
+  // Log to console
+  console.log('[customers-page.js] Auth Debug:', {
+    signedIn: isSignedIn,
+    uid: currentUser?.uid,
+    email: currentUser?.email,
+    role: userStore.role,
+    agencyId: userStore.agencyId
+  });
+}
+
+function updateCustomerButtonState() {
+  const btnNewCustomer = document.getElementById('btnNewCustomer');
+  const currentUser = auth?.currentUser;
+  const isSignedIn = !!currentUser;
+  const hasPermission = isSignedIn && (userStore.role === 'admin' || userStore.role === 'agent');
+  
+  if (btnNewCustomer) {
+    if (!isSignedIn) {
+      btnNewCustomer.disabled = true;
+      btnNewCustomer.title = 'Please sign in to manage customers';
+    } else if (!hasPermission) {
+      btnNewCustomer.disabled = true;
+      btnNewCustomer.title = 'Your account does not have access. Contact admin.';
+    } else {
+      btnNewCustomer.disabled = false;
+      btnNewCustomer.title = '';
+    }
+  }
+  
+  // Show permission message if needed
+  const pageContent = document.querySelector('.page-content');
+  if (pageContent) {
+    let permissionMsg = pageContent.querySelector('#permissionMessage');
+    if (!isSignedIn) {
+      if (!permissionMsg) {
+        permissionMsg = document.createElement('div');
+        permissionMsg.id = 'permissionMessage';
+        permissionMsg.style.cssText = 'padding: 16px; margin-bottom: 20px; background: rgba(251, 113, 133, 0.15); border: 1px solid rgba(251, 113, 133, 0.3); border-radius: 8px; color: var(--danger);';
+        pageContent.insertBefore(permissionMsg, pageContent.firstChild);
+      }
+      permissionMsg.textContent = 'Please sign in to manage customers.';
+      permissionMsg.style.display = 'block';
+    } else if (!hasPermission) {
+      if (!permissionMsg) {
+        permissionMsg = document.createElement('div');
+        permissionMsg.id = 'permissionMessage';
+        permissionMsg.style.cssText = 'padding: 16px; margin-bottom: 20px; background: rgba(251, 113, 133, 0.15); border: 1px solid rgba(251, 113, 133, 0.3); border-radius: 8px; color: var(--danger);';
+        pageContent.insertBefore(permissionMsg, pageContent.firstChild);
+      }
+      permissionMsg.textContent = 'Your account does not have access. Contact admin.';
+      permissionMsg.style.display = 'block';
+    } else if (permissionMsg) {
+      permissionMsg.style.display = 'none';
+    }
+  }
+  
   // Logout
   const btnLogout = document.getElementById('btnLogout');
   if (btnLogout) {
@@ -602,6 +704,38 @@ async function handleCustomerSubmit(e) {
   if (errorDiv) {
     errorDiv.textContent = '';
     errorDiv.style.display = 'none';
+  }
+  
+  // AUTH CHECK - Verify user is signed in before proceeding
+  const currentUser = auth?.currentUser;
+  console.log('[customers-page.js] Auth check:', {
+    hasAuth: !!auth,
+    currentUser: currentUser ? { uid: currentUser.uid, email: currentUser.email } : null,
+    userStore: { uid: userStore.uid, role: userStore.role, agencyId: userStore.agencyId }
+  });
+  
+  if (!currentUser) {
+    const errorMsg = 'You must be signed in to add customers.';
+    console.error('[customers-page.js]', errorMsg);
+    if (errorDiv) {
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
+    }
+    toast(errorMsg, 'error');
+    return;
+  }
+  
+  // Check if user has required role
+  const hasPermission = userStore.role === 'admin' || userStore.role === 'agent';
+  if (!hasPermission) {
+    const errorMsg = 'Your account does not have permission to create customers. Contact admin.';
+    console.error('[customers-page.js]', errorMsg, { role: userStore.role });
+    if (errorDiv) {
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
+    }
+    toast(errorMsg, 'error');
+    return;
   }
   
   // Disable submit button and show loading state

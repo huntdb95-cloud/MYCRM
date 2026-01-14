@@ -38,6 +38,13 @@
           <h1 class="page-title">Customers</h1>
         </div>
         <div class="top-bar-right">
+          <!-- Auth Debug Indicator -->
+          <div id="authDebug" style="display: none; padding: 8px 12px; margin-right: 12px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; font-size: 12px;">
+            <div><strong>Auth:</strong> <span id="authStatus">—</span></div>
+            <div><strong>UID:</strong> <span id="authUid" style="font-family: monospace; font-size: 11px;">—</span></div>
+            <div><strong>Role:</strong> <span id="authRole">—</span></div>
+            <div><strong>Agency:</strong> <span id="authAgency" style="font-family: monospace; font-size: 11px;">—</span></div>
+          </div>
           <div class="search-box">
             <input type="text" id="searchInput" placeholder="Search customers..." />
             <span class="search-icon">🔍</span>

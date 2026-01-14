@@ -36,9 +36,16 @@ service cloud.firestore {
     }
     
     // Check if user has required role
+    // Note: In Firestore rules, we can't use 'in' operator with arrays
+    // So we check each role individually
     function hasRole(agencyId, roles) {
       let role = getUserRole(agencyId);
-      return role != null && role in roles;
+      if (role == null) {
+        return false;
+      }
+      // Check if role matches any value in the roles array
+      // roles[0] and roles[1] are the first two roles passed
+      return (role == roles[0]) || (role == roles[1]);
     }
     
     // ============================================================================

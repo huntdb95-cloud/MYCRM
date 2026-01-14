@@ -1,6 +1,6 @@
 // customers.js - Customer CRUD operations
 
-import { db, storage } from './firebase.js';
+import { db, storage, auth } from './firebase.js';
 import { userStore } from './auth-guard.js';
 import { 
   collection, 
@@ -40,6 +40,11 @@ function getPhoneIndexRef(phoneE164) {
  */
 export async function createCustomer(data) {
   try {
+    // Verify auth before proceeding
+    if (!auth?.currentUser) {
+      throw new Error('You must be signed in to create customers');
+    }
+    
     const validation = validateCustomer(data);
     if (!validation.valid) {
       throw new Error(validation.errors.join(', '));
@@ -48,6 +53,14 @@ export async function createCustomer(data) {
     const customerData = createCustomerData(data);
     customerData.createdAt = serverTimestamp();
     customerData.updatedAt = serverTimestamp();
+    
+    console.log('[customers.js] Creating customer with data:', {
+      hasAuth: !!auth?.currentUser,
+      uid: auth?.currentUser?.uid,
+      agencyId: userStore.agencyId,
+      role: userStore.role,
+      customerDataKeys: Object.keys(customerData)
+    });
     
     const customerRef = doc(getCustomersRef());
     await setDoc(customerRef, customerData);
@@ -63,7 +76,14 @@ export async function createCustomer(data) {
     // Toast handled by caller
     return customerRef.id;
   } catch (error) {
-    console.error('Error creating customer:', error);
+    console.error('[customers.js] Error creating customer:', error);
+    console.error('[customers.js] Error code:', error.code);
+    console.error('[customers.js] Error message:', error.message);
+    console.error('[customers.js] Auth state at error:', {
+      hasAuth: !!auth,
+      currentUser: auth?.currentUser ? { uid: auth.currentUser.uid } : null,
+      userStore: { uid: userStore.uid, role: userStore.role, agencyId: userStore.agencyId }
+    });
     // Toast handled by caller
     throw error;
   }
