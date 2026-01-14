@@ -310,6 +310,24 @@ function openCSVImportModal() {
     document.getElementById('csvImportProgress').style.display = 'none';
     document.getElementById('csvImportResults').style.display = 'none';
     document.getElementById('csvImportError').style.display = 'none';
+    
+    // Reset progress bar state
+    const progressBar = document.getElementById('csvImportProgressBar');
+    const progressPercent = document.getElementById('csvImportProgressPercent');
+    const progressCount = document.getElementById('csvImportProgressCount');
+    const progressSubtitle = document.getElementById('csvImportProgressSubtitle');
+    const progressError = document.getElementById('csvImportProgressError');
+    const progressActions = document.getElementById('csvImportProgressActions');
+    
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressPercent) progressPercent.textContent = '0%';
+    if (progressCount) progressCount.textContent = '0 / 0 rows';
+    if (progressSubtitle) {
+      progressSubtitle.textContent = 'Ready to import';
+      progressSubtitle.style.color = 'var(--muted)';
+    }
+    if (progressError) progressError.style.display = 'none';
+    if (progressActions) progressActions.style.display = 'none';
   }
 }
 
@@ -437,22 +455,88 @@ async function handleCSVImport() {
   const previewDiv = document.getElementById('csvPreview');
   const progressDiv = document.getElementById('csvImportProgress');
   const resultsDiv = document.getElementById('csvImportResults');
-  const progressText = document.getElementById('csvImportProgressText');
+  const progressBar = document.getElementById('csvImportProgressBar');
+  const progressPercent = document.getElementById('csvImportProgressPercent');
+  const progressCount = document.getElementById('csvImportProgressCount');
+  const progressSubtitle = document.getElementById('csvImportProgressSubtitle');
+  const progressError = document.getElementById('csvImportProgressError');
+  const progressActions = document.getElementById('csvImportProgressActions');
+  const btnRetryImport = document.getElementById('btnRetryImport');
+  
+  // Reset progress UI
+  progressBar.style.width = '0%';
+  progressPercent.textContent = '0%';
+  progressCount.textContent = `0 / ${totalRows} rows`;
+  progressSubtitle.textContent = 'Reading file...';
+  progressSubtitle.style.color = 'var(--muted)'; // Reset color
+  progressError.style.display = 'none';
+  progressActions.style.display = 'none';
   
   btnImportCSV.disabled = true;
   previewDiv.style.display = 'none';
   progressDiv.style.display = 'block';
   resultsDiv.style.display = 'none';
   
+  // Track progress state
+  let totalRows = validRows.length;
+  let processedRows = 0;
+  
+  // Update progress UI helper
+  function updateProgress(current, total, statusText) {
+    processedRows = current;
+    const percent = Math.min(100, Math.round((current / total) * 100));
+    progressBar.style.width = `${percent}%`;
+    progressPercent.textContent = `${percent}%`;
+    progressCount.textContent = `${current} / ${total} rows`;
+    if (statusText) {
+      progressSubtitle.textContent = statusText;
+    }
+  }
+  
   try {
-    let currentBatch = 0;
-    let totalBatches = 0;
+    // Initial state
+    updateProgress(0, totalRows, 'Preparing import...');
     
-    const results = await importCSVData(csvProcessedRows, (batchNum, total) => {
-      currentBatch = batchNum;
-      totalBatches = total;
-      progressText.textContent = `Importing batch ${batchNum} of ${total}...`;
+    // Wire up retry button if it exists
+    if (btnRetryImport) {
+      btnRetryImport.onclick = () => {
+        progressError.style.display = 'none';
+        progressActions.style.display = 'none';
+        handleCSVImport();
+      };
+    }
+    
+    const results = await importCSVData(csvProcessedRows, (batchNum, total, processed) => {
+      // Update progress based on rows processed
+      const currentProcessed = processed !== undefined ? processed : Math.min(totalRows, Math.round((batchNum / total) * totalRows));
+      let statusText = 'Importing customers...';
+      
+      // Determine status text based on progress
+      const progressPercent = currentProcessed / totalRows;
+      if (progressPercent >= 0.95) {
+        statusText = 'Finalizing...';
+      } else if (progressPercent >= 0.7) {
+        statusText = 'Importing policies...';
+      } else if (progressPercent >= 0.3) {
+        statusText = 'Importing customers...';
+      } else {
+        statusText = 'Processing rows...';
+      }
+      
+      updateProgress(Math.min(currentProcessed, totalRows), totalRows, statusText);
     });
+    
+    // Complete progress
+    updateProgress(totalRows, totalRows, 'Import complete!');
+    progressBar.style.width = '100%';
+    progressPercent.textContent = '100%';
+    
+    // Show success state briefly
+    progressSubtitle.textContent = '✓ Import complete!';
+    progressSubtitle.style.color = 'var(--success)';
+    
+    // Wait a moment to show completion, then show results
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     // Show results
     progressDiv.style.display = 'none';
@@ -496,10 +580,19 @@ async function handleCSVImport() {
     toast(`Import complete: ${results.imported} imported, ${results.updated} updated, ${results.skipped} skipped`, 'success');
     
   } catch (error) {
-    console.error('Error importing CSV:', error);
+    console.error('[customers-page.js] Error importing CSV:', error);
+    
+    // Stop progress animation
+    progressBar.style.width = progressBar.style.width; // Keep current width
+    
+    // Show error state
+    progressSubtitle.textContent = 'Import failed';
+    progressError.textContent = error.message || 'Failed to import CSV. Please check the console for details.';
+    progressError.style.display = 'block';
+    progressActions.style.display = 'block';
+    
+    // Show toast
     toast(error.message || 'Failed to import CSV', 'error');
-    progressDiv.style.display = 'none';
-    previewDiv.style.display = 'block';
   } finally {
     btnImportCSV.disabled = false;
   }

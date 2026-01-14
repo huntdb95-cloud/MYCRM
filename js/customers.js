@@ -610,11 +610,14 @@ export async function importCSVData(processedRows, progressCallback) {
         if (batchOpCount >= BATCH_SIZE - 10) {
           await currentBatch.commit();
           if (progressCallback) {
-            progressCallback(batchNumber, totalBatches);
+            progressCallback(batchNumber, totalBatches, i + 1); // Pass row index (0-based, so +1 for count)
           }
           currentBatch = writeBatch(db);
           batchOpCount = 0;
           batchNumber++;
+        } else if (progressCallback && (i + 1) % 10 === 0) {
+          // Update progress every 10 rows for smoother animation
+          progressCallback(batchNumber, totalBatches, i + 1);
         }
       } catch (error) {
         console.error(`Error processing row ${row.rowIndex}:`, error);
@@ -630,7 +633,7 @@ export async function importCSVData(processedRows, progressCallback) {
     if (batchOpCount > 0) {
       await currentBatch.commit();
       if (progressCallback) {
-        progressCallback(batchNumber, totalBatches);
+        progressCallback(batchNumber, totalBatches, validRows.length);
       }
     }
     
