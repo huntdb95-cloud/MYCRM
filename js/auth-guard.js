@@ -156,10 +156,13 @@ async function loadUserContext(user) {
   } catch (error) {
     console.error('[auth-guard.js] Error loading user context:', error);
     console.error('[auth-guard.js] Error details:', {
+      uid: user.uid,
+      email: user.email,
       code: error.code,
       message: error.message,
       stack: error.stack
     });
+    console.error('[auth-guard.js] Last attempted path:', error.lastPath || 'unknown');
     throw error;
   }
 }
@@ -194,7 +197,13 @@ async function bootstrapUserAgency(user) {
       console.log('[auth-guard.js] ✓ Agency doc created');
     } catch (agencyError) {
       console.error('[auth-guard.js] Failed to create agency doc:', agencyError);
-      console.error('[auth-guard.js] Path attempted: agencies/' + agencyId);
+      console.error('[auth-guard.js] Error details:', {
+        uid: user.uid,
+        agencyId: agencyId,
+        path: 'agencies/' + agencyId,
+        code: agencyError.code,
+        message: agencyError.message
+      });
       throw new Error(`Failed to create agency: ${agencyError.message}`);
     }
     
@@ -213,7 +222,13 @@ async function bootstrapUserAgency(user) {
       console.log('[auth-guard.js] ✓ Membership doc created');
     } catch (membershipError) {
       console.error('[auth-guard.js] Failed to create membership doc:', membershipError);
-      console.error('[auth-guard.js] Path attempted: agencies/' + agencyId + '/users/' + user.uid);
+      console.error('[auth-guard.js] Error details:', {
+        uid: user.uid,
+        agencyId: agencyId,
+        path: 'agencies/' + agencyId + '/users/' + user.uid,
+        code: membershipError.code,
+        message: membershipError.message
+      });
       throw new Error(`Failed to create membership: ${membershipError.message}`);
     }
     

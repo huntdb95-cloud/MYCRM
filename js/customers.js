@@ -45,6 +45,10 @@ export async function createCustomer(data) {
       throw new Error('You must be signed in to create customers');
     }
     
+    if (!userStore.agencyId) {
+      throw new Error('Agency ID not available. Please refresh and try again.');
+    }
+    
     const validation = validateCustomer(data);
     if (!validation.valid) {
       throw new Error(validation.errors.join(', '));
@@ -54,11 +58,12 @@ export async function createCustomer(data) {
     customerData.createdAt = serverTimestamp();
     customerData.updatedAt = serverTimestamp();
     
-    console.log('[customers.js] Creating customer with data:', {
-      hasAuth: !!auth?.currentUser,
+    const customerPath = `agencies/${userStore.agencyId}/customers`;
+    console.log('[customers.js] Creating customer:', {
       uid: auth?.currentUser?.uid,
       agencyId: userStore.agencyId,
       role: userStore.role,
+      path: customerPath,
       customerDataKeys: Object.keys(customerData)
     });
     

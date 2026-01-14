@@ -3,23 +3,16 @@
 console.log('[index.js] Module loading...');
 
 // Import from centralized Firebase module
-import { auth, db } from './js/firebase.js';
+import { auth } from './js/firebase.js';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-
 // Verify Firebase services are initialized
-if (!auth || !db) {
-  const error = new Error('Firebase services not initialized. Check firebase.js for errors.');
+if (!auth) {
+  const error = new Error('Auth service not initialized. Check firebase.js for errors.');
   console.error('[index.js]', error);
   // Error banner should already be shown by firebase.js
   throw error;
@@ -76,38 +69,10 @@ function showSignedOut() {
   if (ui.boxIn) ui.boxIn.classList.add("hidden");
 }
 
-// ======= USER PROFILE DOC (users/{uid}) =======
-async function ensureUserProfile(user) {
-  if (!db) {
-    throw new Error('Firestore not initialized');
-  }
-  
-  try {
-    const ref = doc(db, "users", user.uid);
-    const snap = await getDoc(ref);
-
-    if (!snap.exists()) {
-      // Create a basic profile document
-      await setDoc(ref, {
-        email: user.email ?? null,
-        displayName: user.displayName ?? null,
-        role: "admin", // starter default; change to "agent" later if you want
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      // Touch updatedAt (optional, but handy)
-      await setDoc(
-        ref,
-        { updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-    }
-  } catch (error) {
-    console.error('[index.js] Error ensuring user profile:', error);
-    throw error;
-  }
-}
+// ======= USER PROFILE DOC =======
+// NOTE: Profile is handled by auth-guard.js bootstrap flow
+// which creates agency membership at agencies/{agencyId}/users/{uid}
+// This matches the Firestore rules structure
 
 // ======= AUTH ACTIONS =======
 async function login(email, password) {
@@ -202,22 +167,15 @@ try {
         return;
       }
 
-      try {
-        await ensureUserProfile(user);
-        showSignedIn(user);
-        
-        // Auto-redirect to app if on index page
-        if (window.location.pathname === '/index.html' || window.location.pathname === '/') {
-          setTimeout(() => {
-            window.location.href = "/app.html";
-          }, 1000);
-        }
-      } catch (e) {
-        console.error('[index.js] Error in auth state handler:', e);
-        showSignedIn(user);
-        if (ui.statusAuthed) {
-          ui.statusAuthed.textContent = `Signed in, but profile doc update failed: ${e?.message || e}`;
-        }
+      // User is signed in - show UI
+      // Profile/agency bootstrap is handled by auth-guard.js when user navigates to app pages
+      showSignedIn(user);
+      
+      // Auto-redirect to app if on index page
+      if (window.location.pathname === '/index.html' || window.location.pathname === '/') {
+        setTimeout(() => {
+          window.location.href = "/app.html";
+        }, 1000);
       }
     } catch (error) {
       console.error('[index.js] Error in onAuthStateChanged callback:', error);
