@@ -13,7 +13,8 @@ import {
   query, 
   where, 
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { toast } from './ui.js';
 
@@ -33,10 +34,31 @@ export async function createTask(data) {
       throw new Error('Task title is required');
     }
     
+    if (!data.dueDate) {
+      throw new Error('Due date is required');
+    }
+    
+    // Process due date and time
+    const dueDate = new Date(data.dueDate);
+    const hasTime = !!(data.dueTime && data.dueTime.trim());
+    
+    let dueAt;
+    if (hasTime) {
+      // Combine date and time
+      const [hours, minutes] = data.dueTime.split(':');
+      dueDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+      dueAt = Timestamp.fromDate(dueDate);
+    } else {
+      // Set to 12:00 PM local time for no-time tasks
+      dueDate.setHours(12, 0, 0, 0);
+      dueAt = Timestamp.fromDate(dueDate);
+    }
+    
     const taskData = {
       title: data.title.trim(),
       description: data.description || null,
-      dueAt: data.dueAt ? new Date(data.dueAt) : null,
+      dueAt: dueAt,
+      hasTime: hasTime,
       priority: data.priority || 'med',
       status: data.status || 'open',
       customerId: data.customerId || null,
@@ -75,8 +97,27 @@ export async function updateTask(taskId, updates) {
       updatedAt: serverTimestamp(),
     };
     
-    if (updates.dueAt) {
-      updateData.dueAt = new Date(updates.dueAt);
+    // Remove dueDate and dueTime from updateData if they exist (we'll process them)
+    delete updateData.dueDate;
+    delete updateData.dueTime;
+    
+    // Process due date and time if provided
+    if (updates.dueDate) {
+      const dueDate = new Date(updates.dueDate);
+      const hasTime = !!(updates.dueTime && updates.dueTime.trim());
+      
+      if (hasTime) {
+        // Combine date and time
+        const [hours, minutes] = updates.dueTime.split(':');
+        dueDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+        updateData.dueAt = Timestamp.fromDate(dueDate);
+        updateData.hasTime = true;
+      } else {
+        // Set to 12:00 PM local time for no-time tasks
+        dueDate.setHours(12, 0, 0, 0);
+        updateData.dueAt = Timestamp.fromDate(dueDate);
+        updateData.hasTime = false;
+      }
     }
     
     await updateDoc(taskRef, updateData);
@@ -125,18 +166,16 @@ export async function listTasks(filters = {}) {
       q = query(q, where('customerId', '==', filters.customerId));
     }
     
-    // Sort by due date or created date
-    if (filters.sortBy === 'dueAt') {
-      q = query(q, orderBy('dueAt', 'asc'));
-    } else {
-      q = query(q, orderBy('createdAt', 'desc'));
-    }
-    
+    // Note: We'll do client-side sorting for proper ordering rules
+    // Just fetch all tasks and sort in memory
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    const tasks = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Client-side sorting will be done in tasks-page.js
+    return tasks;
   } catch (error) {
     console.error('Error listing tasks:', error);
     toast(error.message || 'Failed to load tasks', 'error');

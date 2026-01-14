@@ -6,6 +6,8 @@
   <title>MYCRM - Tasks</title>
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="stylesheet" href="styles.css" />
+  <!-- FullCalendar CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet" />
 </head>
 <body>
   <div class="app-container">
@@ -21,9 +23,9 @@
         <a href="/customers.html" class="nav-link" data-nav><span class="icon">👥</span><span>Customers</span></a>
         <a href="/inbox.html" class="nav-link" data-nav><span class="icon">💬</span><span>Inbox</span></a>
         <a href="/tasks.html" class="nav-link active" data-nav><span class="icon">✓</span><span>Tasks</span></a>
-        <a href="/settings.html" class="nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
         <a href="/premium-leaderboard.html" class="nav-link" data-nav><span class="icon">💰</span><span>Premium Leaderboard</span></a>
         <a href="/upcoming-renewals.html" class="nav-link" data-nav><span class="icon">🔄</span><span>Upcoming Renewals</span></a>
+        <a href="/settings.html" class="nav-link" data-nav><span class="icon">⚙️</span><span>Settings</span></a>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info" id="userInfo">
@@ -46,7 +48,7 @@
       </header>
 
       <div class="page-content">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
           <div class="card">
             <h3>Open</h3>
             <div id="tasksOpen">Loading...</div>
@@ -59,6 +61,26 @@
             <h3>Done</h3>
             <div id="tasksDone">Loading...</div>
           </div>
+        </div>
+        
+        <!-- Calendar Section -->
+        <div class="card">
+          <div class="calendar-header">
+            <h3>Calendar</h3>
+            <div class="calendar-controls">
+              <div class="view-toggle">
+                <button class="view-btn active" data-view="dayGridMonth">Month</button>
+                <button class="view-btn" data-view="timeGridWeek">Week</button>
+                <button class="view-btn" data-view="timeGridDay">Day</button>
+              </div>
+              <div class="calendar-nav">
+                <button class="btn-icon" id="btnCalendarPrev">‹</button>
+                <button class="btn btn-text" id="btnCalendarToday">Today</button>
+                <button class="btn-icon" id="btnCalendarNext">›</button>
+              </div>
+            </div>
+          </div>
+          <div id="calendar"></div>
         </div>
       </div>
     </main>
@@ -97,8 +119,12 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Due Date</label>
-          <input type="datetime-local" id="taskDueAt" class="form-input" />
+          <label class="form-label">Due Date *</label>
+          <input type="date" id="taskDueDate" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Due Time (Optional)</label>
+          <input type="time" id="taskDueTime" class="form-input" />
         </div>
         <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
           <button type="button" class="btn" id="btnCancel">Cancel</button>
@@ -108,6 +134,8 @@
     </div>
   </div>
 
+  <!-- FullCalendar JS -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script type="module" src="js/tasks-page.js"></script>
 </body>
 </html>
