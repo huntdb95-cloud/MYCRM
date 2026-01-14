@@ -842,6 +842,21 @@ body {
   transform: translateY(-2px);
 }
 
+.clickable-card {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.clickable-card:focus {
+  outline: 2px solid var(--primary-2);
+  outline-offset: 2px;
+}
+
+.clickable-card:hover {
+  border-color: var(--primary-2);
+}
+
 .snapshot-icon {
   font-size: 32px;
   width: 60px;

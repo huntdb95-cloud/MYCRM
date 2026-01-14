@@ -11,8 +11,27 @@ import { toast, confirm, debounce, showModal } from './ui.js';
 import { parseCSV, createHeaderMapping, processCSVRow } from './csv-import.js';
 
 let customers = [];
+let customersPageInitialized = false;
+let loadTimeout = null;
+
+// DOM element references (declared once at module level)
+let btnNewCustomer = null;
+let btnUploadCSV = null;
+let btnLogout = null;
+let btnMenuToggle = null;
+let searchInput = null;
+let filterStatus = null;
+let filterAssigned = null;
+let customerModal = null;
+let btnCancel = null;
+let customerForm = null;
 
 async function init() {
+  // Guard against double initialization
+  if (customersPageInitialized) {
+    console.warn('[customers-page.js] Already initialized, skipping');
+    return;
+  }
   try {
     console.log('[customers-page.js] Initializing...');
     
@@ -36,6 +55,7 @@ async function init() {
       openCSVImportModal();
     }
     
+    customersPageInitialized = true;
     console.log('[customers-page.js] Initialized successfully');
   } catch (error) {
     console.error('[customers-page.js] Failed to initialize:', error);
@@ -46,13 +66,25 @@ async function init() {
 }
 
 function setupUI() {
+  // Initialize DOM element references FIRST (before any functions that use them)
+  btnNewCustomer = document.getElementById('btnNewCustomer');
+  btnUploadCSV = document.getElementById('btnUploadCSV');
+  btnLogout = document.getElementById('btnLogout');
+  btnMenuToggle = document.getElementById('btnMenuToggle');
+  searchInput = document.getElementById('searchInput');
+  filterStatus = document.getElementById('filterStatus');
+  filterAssigned = document.getElementById('filterAssigned');
+  customerModal = document.getElementById('customerModal');
+  btnCancel = document.getElementById('btnCancel');
+  customerForm = document.getElementById('customerForm');
+  
   // User info
   const userNameEl = document.getElementById('userName');
   const userRoleEl = document.getElementById('userRole');
   if (userNameEl) userNameEl.textContent = userStore.displayName || userStore.email || 'User';
   if (userRoleEl) userRoleEl.textContent = userStore.role || '—';
   
-  // Auth Debug Indicator
+  // Auth Debug Indicator (now that DOM elements are initialized)
   updateAuthDebug();
   updateCustomerButtonState();
   
@@ -109,7 +141,7 @@ function updateAuthDebug() {
 }
 
 function updateCustomerButtonState() {
-  const btnNewCustomer = document.getElementById('btnNewCustomer');
+  // Use module-level reference (initialized in setupUI)
   const currentUser = auth?.currentUser;
   const isSignedIn = !!currentUser;
   const hasPermission = isSignedIn && (userStore.role === 'admin' || userStore.role === 'agent');
@@ -154,8 +186,8 @@ function updateCustomerButtonState() {
     }
   }
   
+  // Wire up event listeners (DOM elements already initialized above)
   // Logout
-  const btnLogout = document.getElementById('btnLogout');
   if (btnLogout) {
     btnLogout.addEventListener('click', async () => {
       try {
@@ -168,7 +200,6 @@ function updateCustomerButtonState() {
   }
   
   // Menu toggle
-  const btnMenuToggle = document.getElementById('btnMenuToggle');
   const sidebar = document.getElementById('sidebar');
   if (btnMenuToggle && sidebar) {
     btnMenuToggle.addEventListener('click', () => {
@@ -177,19 +208,16 @@ function updateCustomerButtonState() {
   }
   
   // New customer button
-  const btnNewCustomer = document.getElementById('btnNewCustomer');
   if (btnNewCustomer) {
     btnNewCustomer.addEventListener('click', openCustomerModal);
   }
   
   // Upload CSV button
-  const btnUploadCSV = document.getElementById('btnUploadCSV');
   if (btnUploadCSV) {
     btnUploadCSV.addEventListener('click', openCSVImportModal);
   }
   
   // Search
-  const searchInput = document.getElementById('searchInput');
   if (searchInput) {
     searchInput.addEventListener('input', debounce(() => {
       loadCustomers();
@@ -197,8 +225,6 @@ function updateCustomerButtonState() {
   }
   
   // Filters
-  const filterStatus = document.getElementById('filterStatus');
-  const filterAssigned = document.getElementById('filterAssigned');
   if (filterStatus) {
     filterStatus.addEventListener('change', loadCustomers);
   }
@@ -207,9 +233,6 @@ function updateCustomerButtonState() {
   }
   
   // Modal
-  const customerModal = document.getElementById('customerModal');
-  const btnCancel = document.getElementById('btnCancel');
-  const customerForm = document.getElementById('customerForm');
   
   if (btnCancel) {
     btnCancel.addEventListener('click', closeCustomerModal);

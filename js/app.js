@@ -156,12 +156,11 @@ async function loadDashboard() {
     
     // Calculate portfolio metrics
     const totalCustomers = customersSnapshot.size;
-    const { activePoliciesCount, totalPremium } = calculatePolicyMetrics(policiesSnapshot);
-    const renewalsCount = renewalsSnapshot.size;
+    const { totalPremium } = calculatePolicyMetrics(policiesSnapshot);
+    const renewalsCount = renewalsSnapshot.length;
     
     // Update snapshot cards
     updateSnapshotCard('totalCustomers', totalCustomers, totalCustomers === 0);
-    updateSnapshotCard('activePolicies', activePoliciesCount, activePoliciesCount === 0);
     updateSnapshotCard('totalPremium', formatCurrency(totalPremium), totalPremium === 0);
     updateSnapshotCard('renewalsCount', renewalsCount, renewalsCount === 0);
     
@@ -172,7 +171,7 @@ async function loadDashboard() {
     renderConversationsWidget(conversationsSnapshot, agencyId);
     
     // Show/hide getting started banner
-    const hasData = totalCustomers > 0 || activePoliciesCount > 0;
+    const hasData = totalCustomers > 0 || totalPremium > 0;
     const gettingStartedBanner = document.getElementById('gettingStartedBanner');
     if (gettingStartedBanner) {
       gettingStartedBanner.classList.toggle('hidden', hasData);
@@ -224,13 +223,15 @@ async function getRenewals(agencyId) {
     
     policiesSnapshot.forEach(doc => {
       const policy = doc.data();
-      if (policy.status === 'active' && policy.expirationDate) {
-        const expirationDate = policy.expirationDate.toDate ? policy.expirationDate.toDate() : new Date(policy.expirationDate);
-        if (expirationDate >= now && expirationDate <= thirtyDaysFromNow) {
+      // Check for expirationDate, renewalDate, or effectiveTo
+      const expirationDate = policy.expirationDate || policy.renewalDate || policy.effectiveTo;
+      if (policy.status === 'active' && expirationDate) {
+        const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate);
+        if (expDate >= now && expDate <= thirtyDaysFromNow) {
           renewals.push({
             id: doc.id,
             customerId: customerDoc.id,
-            customerName: customerDoc.data().fullName || 'Unknown',
+            customerName: customerDoc.data().fullName || customerDoc.data().insuredName || 'Unknown',
             ...policy
           });
         }
@@ -240,9 +241,11 @@ async function getRenewals(agencyId) {
   
   // Sort by expiration date
   renewals.sort((a, b) => {
-    const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate);
-    const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate);
-    return dateA - dateB;
+    const dateA = (a.expirationDate || a.renewalDate || a.effectiveTo);
+    const dateB = (b.expirationDate || b.renewalDate || b.effectiveTo);
+    const dateAVal = dateA.toDate ? dateA.toDate() : new Date(dateA);
+    const dateBVal = dateB.toDate ? dateB.toDate() : new Date(dateB);
+    return dateAVal - dateBVal;
   });
   
   return renewals.slice(0, 8);
@@ -308,25 +311,17 @@ async function getRecentConversations(agencyId) {
 
 // Calculate metrics
 function calculatePolicyMetrics(policies) {
-  let activePoliciesCount = 0;
   let totalPremium = 0;
   
   policies.forEach(policy => {
     if (policy.status === 'active') {
-      activePoliciesCount++;
       if (policy.premium && typeof policy.premium === 'number') {
         totalPremium += policy.premium;
       }
     }
   });
   
-  // Fallback: if no policies found, try to use customer.totalPremium
-  if (activePoliciesCount === 0) {
-    // This would require querying customers for totalPremium field
-    // For now, return 0
-  }
-  
-  return { activePoliciesCount, totalPremium };
+  return { totalPremium };
 }
 
 // Render widgets
@@ -334,7 +329,7 @@ function renderRenewalsWidget(renewals, agencyId) {
   const widget = document.getElementById('renewalsWidget');
   if (!widget) return;
   
-  if (renewals.length === 0) {
+  if (!renewals || renewals.length === 0) {
     widget.innerHTML = `
       <p class="empty-state">
         No renewals in the next 30 days.<br/>
@@ -345,12 +340,13 @@ function renderRenewalsWidget(renewals, agencyId) {
   }
   
   widget.innerHTML = renewals.map(renewal => {
-    const expirationDate = renewal.expirationDate.toDate ? renewal.expirationDate.toDate() : new Date(renewal.expirationDate);
+    const expirationDate = renewal.expirationDate || renewal.renewalDate || renewal.effectiveTo;
+    const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate);
     return `
       <div class="list-item" onclick="window.location.href='/customer.html?id=${renewal.customerId}'">
         <div class="list-item-main">
           <div class="list-item-title">${renewal.customerName}</div>
-          <div class="list-item-subtitle">${renewal.policyType || renewal.carrier || 'Policy'} • Expires ${formatDate(expirationDate)}</div>
+          <div class="list-item-subtitle">${renewal.policyType || renewal.carrier || 'Policy'} • Expires ${formatDate(expDate)}</div>
         </div>
         <div class="list-item-meta">${formatCurrency(renewal.premium || 0)}</div>
       </div>
