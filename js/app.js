@@ -5,6 +5,7 @@ import { signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth
 import { initAuthGuard, userStore } from './auth-guard.js';
 import {
   collection,
+  collectionGroup,
   query,
   where,
   getDocs,
@@ -13,6 +14,8 @@ import {
   limit,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getCachedMetrics, setCachedMetrics, getCacheAge } from './lib/cache.js';
+import { getMetrics, recalculateRenewals } from './lib/metrics.js';
 
 // Initialize
 async function init() {
@@ -139,30 +142,49 @@ async function loadDashboard() {
       return;
     }
     
-    // Load all dashboard data in parallel
+    // Check cache first for instant render
+    const cachedMetrics = getCachedMetrics(agencyId);
+    if (cachedMetrics) {
+      // Render cached metrics immediately
+      updateSnapshotCard('totalCustomers', cachedMetrics.totalCustomers, cachedMetrics.totalCustomers === 0);
+      updateSnapshotCard('totalPremium', formatCurrency(cachedMetrics.totalPremium), cachedMetrics.totalPremium === 0);
+      updateSnapshotCard('renewalsCount', cachedMetrics.renewalsNext30Days, cachedMetrics.renewalsNext30Days === 0);
+      
+      // Show cache age if available
+      const cacheAge = getCacheAge(agencyId);
+      if (cacheAge !== null && cacheAge < 60) {
+        // Optionally show "Updated Xs ago" - can be added to UI later
+      }
+    } else {
+      // Show loading skeleton
+      updateSnapshotCard('totalCustomers', '—', false);
+      updateSnapshotCard('totalPremium', '—', false);
+      updateSnapshotCard('renewalsCount', '—', false);
+    }
+    
+    // Load metrics from Firestore (O(1) read)
+    const metrics = await getMetrics(agencyId);
+    
+    // Update snapshot cards with fresh data
+    updateSnapshotCard('totalCustomers', metrics.totalCustomers, metrics.totalCustomers === 0);
+    updateSnapshotCard('totalPremium', formatCurrency(metrics.totalPremium), metrics.totalPremium === 0);
+    updateSnapshotCard('renewalsCount', metrics.renewalsNext30Days, metrics.renewalsNext30Days === 0);
+    
+    // Cache the metrics
+    setCachedMetrics(agencyId, metrics);
+    
+    // Load widgets in parallel (these don't need to block metrics display)
     const [
-      customersSnapshot,
-      policiesSnapshot,
       renewalsSnapshot,
       tasksSnapshot,
+      customersSnapshot,
       conversationsSnapshot
     ] = await Promise.all([
-      getCustomers(agencyId),
-      getPolicies(agencyId),
       getRenewals(agencyId),
       getTasksDueSoon(agencyId),
+      getCustomers(agencyId), // Still needed for cross-sell widget
       getRecentConversations(agencyId)
     ]);
-    
-    // Calculate portfolio metrics
-    const totalCustomers = customersSnapshot.size;
-    const { totalPremium } = calculatePolicyMetrics(policiesSnapshot);
-    const renewalsCount = renewalsSnapshot.length;
-    
-    // Update snapshot cards
-    updateSnapshotCard('totalCustomers', totalCustomers, totalCustomers === 0);
-    updateSnapshotCard('totalPremium', formatCurrency(totalPremium), totalPremium === 0);
-    updateSnapshotCard('renewalsCount', renewalsCount, renewalsCount === 0);
     
     // Render widgets
     renderRenewalsWidget(renewalsSnapshot, agencyId);
@@ -171,7 +193,7 @@ async function loadDashboard() {
     renderConversationsWidget(conversationsSnapshot, agencyId);
     
     // Show/hide getting started banner
-    const hasData = totalCustomers > 0 || totalPremium > 0;
+    const hasData = metrics.totalCustomers > 0 || metrics.totalPremium > 0;
     const gettingStartedBanner = document.getElementById('gettingStartedBanner');
     if (gettingStartedBanner) {
       gettingStartedBanner.classList.toggle('hidden', hasData);
@@ -209,6 +231,95 @@ async function getPolicies(agencyId) {
 }
 
 async function getRenewals(agencyId) {
+  try {
+    const now = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(now.getDate() + 30);
+    
+    const nowTimestamp = Timestamp.fromDate(now);
+    const thirtyDaysTimestamp = Timestamp.fromDate(thirtyDaysFromNow);
+    
+    // Use collectionGroup query with denormalized agencyId field
+    // This is a single query instead of N+1
+    const policiesRef = collectionGroup(db, 'policies');
+    const q = query(
+      policiesRef,
+      where('agencyId', '==', agencyId),
+      where('status', '==', 'active'),
+      where('expirationDate', '>=', nowTimestamp),
+      where('expirationDate', '<=', thirtyDaysTimestamp),
+      orderBy('expirationDate', 'asc'),
+      limit(8)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    // Fetch customer names for the renewals
+    const renewals = [];
+    const customerIds = new Set();
+    const policies = [];
+    
+    snapshot.forEach(doc => {
+      const policy = doc.data();
+      // Try denormalized customerId first, then parse from document path
+      let customerId = policy.customerId;
+      if (!customerId && doc.ref && doc.ref.parent && doc.ref.parent.parent) {
+        // Parse from path: agencies/{agencyId}/customers/{customerId}/policies/{policyId}
+        const pathParts = doc.ref.path.split('/');
+        const customerIndex = pathParts.indexOf('customers');
+        if (customerIndex >= 0 && customerIndex + 1 < pathParts.length) {
+          customerId = pathParts[customerIndex + 1];
+        }
+      }
+      if (customerId) {
+        customerIds.add(customerId);
+        policies.push({
+          id: doc.id,
+          customerId,
+          ...policy
+        });
+      }
+    });
+    
+    // Batch fetch customer names
+    const customerNames = {};
+    if (customerIds.size > 0) {
+      const customersRef = collection(db, 'agencies', agencyId, 'customers');
+      const customerPromises = Array.from(customerIds).map(async (customerId) => {
+        try {
+          const { doc: docFn, getDoc } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
+          const customerRef = docFn(db, 'agencies', agencyId, 'customers', customerId);
+          const customerSnap = await getDoc(customerRef);
+          if (customerSnap.exists()) {
+            const customerData = customerSnap.data();
+            customerNames[customerId] = customerData.fullName || customerData.insuredName || 'Unknown';
+          }
+        } catch (error) {
+          console.warn(`[app.js] Failed to fetch customer ${customerId}:`, error);
+          customerNames[customerId] = 'Unknown';
+        }
+      });
+      await Promise.all(customerPromises);
+    }
+    
+    // Build renewals array with customer names
+    policies.forEach(policy => {
+      renewals.push({
+        ...policy,
+        customerName: customerNames[policy.customerId] || 'Unknown'
+      });
+    });
+    
+    return renewals;
+  } catch (error) {
+    // If collectionGroup query fails (e.g., index not created), fall back to old method
+    console.warn('[app.js] CollectionGroup query failed, falling back to old method:', error);
+    return getRenewalsFallback(agencyId);
+  }
+}
+
+// Fallback method (old N+1 approach) for when collectionGroup index isn't ready
+async function getRenewalsFallback(agencyId) {
   const now = new Date();
   const thirtyDaysFromNow = new Date();
   thirtyDaysFromNow.setDate(now.getDate() + 30);

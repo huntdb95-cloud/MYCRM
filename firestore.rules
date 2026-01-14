@@ -186,6 +186,16 @@ service cloud.firestore {
         allow read: if signedIn() && isAgencyMember(agencyId);
         allow write: if signedIn() && isAgencyAdmin(agencyId);
       }
+      
+      // ============================================================================
+      // STATS COLLECTION (metrics cache)
+      // ============================================================================
+      match /stats/{statId} {
+        // All agency members can read stats
+        allow read: if signedIn() && isAgencyMember(agencyId);
+        // Only agents and admins can update stats (for metrics maintenance)
+        allow write: if signedIn() && isAdminOrAgent(agencyId);
+      }
     }
   }
 }

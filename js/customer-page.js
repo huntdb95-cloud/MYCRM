@@ -11,6 +11,7 @@ import { listUploads, uploadFile } from './uploads.js';
 import { formatPhone, formatDateTime, formatDateOnly, addMonths, addYears, normalizeToDate } from './models.js';
 import { toast } from './ui.js';
 import { collection, doc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { updatePremium, recalculateRenewals } from './lib/metrics.js';
 
 let customerId = null;
 let customer = null;
@@ -1066,6 +1067,8 @@ async function handlePolicySubmit(e) {
       premium: premiumEl && premiumEl.value ? parseFloat(premiumEl.value) : null,
       status: statusEl ? statusEl.value : 'active',
       expirationManuallySet: expirationManuallySetEl ? expirationManuallySetEl.value === 'true' : false,
+      agencyId: userStore.agencyId, // Denormalized field for collectionGroup queries
+      customerId: customerId, // Denormalized field for easier access
     };
     
     // Add termMonths for Personal Auto
@@ -1080,13 +1083,43 @@ async function handlePolicySubmit(e) {
     // Save policy
     const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js");
     
+    let oldPremium = 0;
+    let oldStatus = 'inactive';
+    let oldExpirationDate = null;
+    
     if (currentPolicyId) {
-      // Update existing policy
+      // Get old policy data for metrics calculation
       const policyRef = doc(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies', currentPolicyId);
+      const oldPolicySnap = await getDoc(policyRef);
+      if (oldPolicySnap.exists()) {
+        const oldPolicy = oldPolicySnap.data();
+        oldPremium = (oldPolicy.status === 'active' && oldPolicy.premium) ? oldPolicy.premium : 0;
+        oldStatus = oldPolicy.status || 'inactive';
+        oldExpirationDate = oldPolicy.expirationDate;
+      }
+      
+      // Update existing policy
       await setDoc(policyRef, {
         ...policyData,
         updatedAt: serverTimestamp(),
       }, { merge: true });
+      
+      // Update metrics: adjust premium based on status change
+      const newPremium = (policyData.status === 'active' && policyData.premium) ? policyData.premium : 0;
+      const premiumDelta = newPremium - oldPremium;
+      if (premiumDelta !== 0) {
+        await updatePremium(userStore.agencyId, premiumDelta);
+      }
+      
+      // Recalculate renewals if expiration date or status changed
+      const expirationChanged = !oldExpirationDate || 
+        (oldExpirationDate.toMillis && policyData.expirationDate.toMillis && 
+         oldExpirationDate.toMillis() !== policyData.expirationDate.toMillis()) ||
+        oldStatus !== policyData.status;
+      if (expirationChanged) {
+        await recalculateRenewals(userStore.agencyId);
+      }
+      
       toast('Policy updated successfully', 'success');
     } else {
       // Create new policy
@@ -1097,6 +1130,15 @@ async function handlePolicySubmit(e) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      
+      // Update metrics: add premium if active
+      if (policyData.status === 'active' && policyData.premium) {
+        await updatePremium(userStore.agencyId, policyData.premium);
+      }
+      
+      // Recalculate renewals for new policy
+      await recalculateRenewals(userStore.agencyId);
+      
       toast('Policy created successfully', 'success');
     }
     

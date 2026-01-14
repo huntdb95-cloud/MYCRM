@@ -20,6 +20,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { normalizePhone, createCustomerData, validateCustomer } from './models.js';
 import { toast } from './ui.js';
+import { incrementCustomerCount } from './lib/metrics.js';
 
 /**
  * Get customers collection reference
@@ -77,6 +78,9 @@ export async function createCustomer(data) {
         updatedAt: serverTimestamp(),
       });
     }
+    
+    // Update metrics (increment customer count)
+    await incrementCustomerCount(userStore.agencyId, 1);
     
     // Toast handled by caller
     return customerRef.id;
@@ -316,12 +320,29 @@ export async function deleteCustomer(customerId) {
     // Commit batch
     await batch.commit();
     
+    // Update metrics (decrement customer count and subtract premium)
+    const { incrementCustomerCount, updatePremium } = await import('./lib/metrics.js');
+    await incrementCustomerCount(agencyId, -1);
+    
+    // Calculate total premium from deleted policies and subtract it
+    let totalPremiumToSubtract = 0;
+    policiesSnap.forEach(policyDoc => {
+      const policyData = policyDoc.data();
+      if (policyData.status === 'active' && policyData.premium && typeof policyData.premium === 'number') {
+        totalPremiumToSubtract += policyData.premium;
+      }
+    });
+    if (totalPremiumToSubtract > 0) {
+      await updatePremium(agencyId, -totalPremiumToSubtract);
+    }
+    
     console.log('[customers.js] DELETE CUSTOMER SUCCESS', {
       uid,
       agencyId,
       customerId,
       policiesDeleted: policiesSnap.size,
-      notesDeleted: notesSnap.size
+      notesDeleted: notesSnap.size,
+      premiumSubtracted: totalPremiumToSubtract
     });
     
     // Toast handled by caller
@@ -468,6 +489,11 @@ export async function importCSVData(processedRows, progressCallback) {
   
   const BATCH_SIZE = 400; // Firestore batch limit is 500, use 400 to be safe
   
+  // Track metrics changes for batch update
+  let newCustomersCount = 0;
+  let newPoliciesPremium = 0;
+  let hasRenewals = false;
+  
   try {
     // Process rows in batches
     const validRows = processedRows.filter(r => r.valid && r.data);
@@ -545,6 +571,7 @@ export async function importCSVData(processedRows, progressCallback) {
           batchOpCount++;
           results.imported++;
           isNewCustomer = true;
+          newCustomersCount++;
         }
         
         // Check if policy already exists
@@ -563,6 +590,15 @@ export async function importCSVData(processedRows, progressCallback) {
           const effectiveTimestamp = Timestamp.fromDate(rowData.effectiveDate);
           const expirationTimestamp = Timestamp.fromDate(rowData.expirationDate);
           
+          // Check if this policy will be a renewal in next 30 days
+          const now = new Date();
+          const thirtyDaysFromNow = new Date();
+          thirtyDaysFromNow.setDate(now.getDate() + 30);
+          const expDate = rowData.expirationDate instanceof Date ? rowData.expirationDate : new Date(rowData.expirationDate);
+          if (expDate >= now && expDate <= thirtyDaysFromNow) {
+            hasRenewals = true;
+          }
+          
           currentBatch.set(policyRef, {
             policyTypeNormalized: rowData.policyTypeNormalized,
             rawPolicyType: rowData.rawPolicyType,
@@ -571,11 +607,18 @@ export async function importCSVData(processedRows, progressCallback) {
             insuranceCompany: rowData.insuranceCompany,
             premium: rowData.premium,
             status: 'active',
+            agencyId: userStore.agencyId, // Denormalized field for collectionGroup queries
+            customerId: customerId, // Denormalized field for easier access
             importedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
           batchOpCount++;
+          
+          // Track premium for metrics
+          if (rowData.premium && typeof rowData.premium === 'number') {
+            newPoliciesPremium += rowData.premium;
+          }
           
           console.log('[customers.js] Created policy', {
             policyId: policyRef.id,
@@ -634,6 +677,26 @@ export async function importCSVData(processedRows, progressCallback) {
       await currentBatch.commit();
       if (progressCallback) {
         progressCallback(batchNumber, totalBatches, validRows.length);
+      }
+    }
+    
+    // Update metrics after import completes
+    if (newCustomersCount > 0 || newPoliciesPremium > 0 || hasRenewals) {
+      const { incrementCustomerCount, updatePremium, recalculateRenewals } = await import('./lib/metrics.js');
+      
+      // Update customer count
+      if (newCustomersCount > 0) {
+        await incrementCustomerCount(userStore.agencyId, newCustomersCount);
+      }
+      
+      // Update premium
+      if (newPoliciesPremium > 0) {
+        await updatePremium(userStore.agencyId, newPoliciesPremium);
+      }
+      
+      // Recalculate renewals if any new policies might be renewals
+      if (hasRenewals) {
+        await recalculateRenewals(userStore.agencyId);
       }
     }
     
