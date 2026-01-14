@@ -534,7 +534,7 @@ export async function importCSVData(processedRows, progressCallback) {
             },
             preferredLanguage: 'en',
             tags: [],
-            status: 'lead',
+            status: 'active', // CSV-imported customers default to active
             source: 'CSV Import',
             assignedToUid: null,
             lastContactAt: null,
@@ -557,8 +557,9 @@ export async function importCSVData(processedRows, progressCallback) {
         );
         
         if (!existingPolicy) {
-          // Create new policy
-          const policyRef = doc(getPoliciesRef(customerId));
+          // Create new policy in the correct subcollection path
+          const policiesRef = collection(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies');
+          const policyRef = doc(policiesRef);
           const effectiveTimestamp = Timestamp.fromDate(rowData.effectiveDate);
           const expirationTimestamp = Timestamp.fromDate(rowData.expirationDate);
           
@@ -575,9 +576,34 @@ export async function importCSVData(processedRows, progressCallback) {
             updatedAt: serverTimestamp(),
           });
           batchOpCount++;
+          
+          console.log('[customers.js] Created policy', {
+            policyId: policyRef.id,
+            customerId,
+            policyType: rowData.policyTypeNormalized,
+            company: rowData.insuranceCompany
+          });
         } else {
           // Policy already exists, skip
           results.skipped++;
+          console.log('[customers.js] Skipped duplicate policy', {
+            customerId,
+            policyType: rowData.policyTypeNormalized
+          });
+        }
+        
+        // Log customer creation/update
+        if (isNewCustomer) {
+          console.log('[customers.js] Created customer', {
+            customerId,
+            name: rowData.insuredName,
+            status: 'active'
+          });
+        } else {
+          console.log('[customers.js] Matched existing customer', {
+            customerId,
+            name: rowData.insuredName
+          });
         }
         
         // Commit batch if we're approaching the limit

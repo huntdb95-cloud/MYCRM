@@ -74,25 +74,90 @@ export async function uploadFile(file, customerId) {
 
 /**
  * List uploads for customer
+ * 
+ * REQUIRED COMPOSITE INDEX:
+ * Collection: uploads (or collectionGroup: uploads)
+ * Fields: customerId (Ascending), createdAt (Descending), __name__ (Descending)
+ * 
+ * If index is missing, falls back to query without orderBy and sorts client-side.
  */
 export async function listUploads(customerId) {
   try {
-    let q = query(getUploadsRef());
+    if (!userStore.agencyId) {
+      throw new Error('Agency ID not available');
+    }
+    
+    const uploadsRef = getUploadsRef();
+    let q = query(uploadsRef);
     
     if (customerId) {
       q = query(q, where('customerId', '==', customerId));
     }
     
-    q = query(q, orderBy('createdAt', 'desc'));
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // Try query with orderBy (requires composite index)
+    try {
+      q = query(q, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (indexError) {
+      // Check if this is a missing index error
+      if (indexError.code === 'failed-precondition' && 
+          (indexError.message?.includes('index') || indexError.message?.includes('requires an index'))) {
+        
+        console.warn('[uploads.js] Composite index missing, using fallback query', {
+          errorCode: indexError.code,
+          errorMessage: indexError.message,
+          customerId,
+          agencyId: userStore.agencyId
+        });
+        
+        // Fallback: Query without orderBy, then sort client-side
+        let fallbackQ = query(uploadsRef);
+        if (customerId) {
+          fallbackQ = query(fallbackQ, where('customerId', '==', customerId));
+        }
+        
+        const snapshot = await getDocs(fallbackQ);
+        const uploads = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Sort client-side by createdAt (descending)
+        uploads.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+          const bTime = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+          return bTime - aTime; // Descending
+        });
+        
+        // Show user-friendly message about index building
+        console.info('[uploads.js] Using fallback query (index building). Results sorted client-side.');
+        
+        return uploads;
+      }
+      
+      // Re-throw if it's not an index error
+      throw indexError;
+    }
   } catch (error) {
-    console.error('Error listing uploads:', error);
-    toast(error.message || 'Failed to load uploads', 'error');
+    console.error('[uploads.js] Error listing uploads', {
+      errorCode: error.code,
+      errorMessage: error.message,
+      customerId,
+      agencyId: userStore.agencyId,
+      stack: error.stack
+    });
+    
+    // Show user-friendly error message
+    if (error.code === 'failed-precondition' && error.message?.includes('index')) {
+      toast('Database index is building. Please retry in a minute.', 'info');
+    } else {
+      toast(error.message || 'Failed to load uploads', 'error');
+    }
+    
     throw error;
   }
 }

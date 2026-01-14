@@ -134,6 +134,38 @@ function setupUI() {
       }
     });
   }
+  
+  // Edit customer button
+  const btnEdit = document.getElementById('btnEdit');
+  if (btnEdit) {
+    btnEdit.addEventListener('click', handleEditClick);
+  }
+  
+  // Check role and set edit button state
+  updateEditButtonState();
+}
+
+let isEditMode = false;
+
+function updateEditButtonState() {
+  const btnEdit = document.getElementById('btnEdit');
+  if (!btnEdit) return;
+  
+  const currentUser = auth?.currentUser;
+  const isSignedIn = !!currentUser;
+  const role = userStore.role;
+  const canEdit = isSignedIn && (role === 'admin' || role === 'agent');
+  
+  if (!isSignedIn) {
+    btnEdit.disabled = true;
+    btnEdit.title = 'Please sign in to edit customers';
+  } else if (!canEdit) {
+    btnEdit.disabled = true;
+    btnEdit.title = 'You do not have permission to edit customers. View only.';
+  } else {
+    btnEdit.disabled = false;
+    btnEdit.title = '';
+  }
 }
 
 function switchTab(tabName) {
@@ -179,61 +211,257 @@ async function loadCustomer() {
     }
     
     // Update UI
-    const customerName = document.getElementById('customerName');
-    if (customerName) customerName.textContent = customer.fullName || 'Unknown';
-    
-    const customerPhone = document.getElementById('customerPhone');
-    if (customerPhone) customerPhone.textContent = customer.phoneE164 ? formatPhone(customer.phoneE164) : '—';
-    
-    const customerEmail = document.getElementById('customerEmail');
-    if (customerEmail) customerEmail.textContent = customer.email || '—';
-    
-    const customerStatus = document.getElementById('customerStatus');
-    if (customerStatus) customerStatus.textContent = customer.status || 'lead';
-    
-    const lastContact = document.getElementById('lastContact');
-    if (lastContact) lastContact.textContent = customer.lastContactAt ? formatDateTime(customer.lastContactAt) : '—';
+    renderCustomerInfo();
     
     // Load overview
     loadOverview();
+    
+    // Update edit button state after customer loads
+    updateEditButtonState();
   } catch (error) {
     console.error('Error loading customer:', error);
     toast('Failed to load customer', 'error');
   }
 }
 
+function renderCustomerInfo() {
+  const customerName = document.getElementById('customerName');
+  if (customerName) customerName.textContent = customer.fullName || 'Unknown';
+  
+  const customerPhone = document.getElementById('customerPhone');
+  if (customerPhone) customerPhone.textContent = customer.phoneE164 ? formatPhone(customer.phoneE164) : '—';
+  
+  const customerEmail = document.getElementById('customerEmail');
+  if (customerEmail) customerEmail.textContent = customer.email || '—';
+  
+  const customerStatus = document.getElementById('customerStatus');
+  if (customerStatus) customerStatus.textContent = customer.status || 'lead';
+  
+  const lastContact = document.getElementById('lastContact');
+  if (lastContact) lastContact.textContent = customer.lastContactAt ? formatDateTime(customer.lastContactAt) : '—';
+}
+
 function loadOverview() {
   const customerDetails = document.getElementById('customerDetails');
   if (!customerDetails) return;
   
-  customerDetails.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Full Name</div>
-        <div>${customer.fullName || '—'}</div>
+  if (isEditMode) {
+    // Edit mode - show form
+    const address = customer.address || {};
+    customerDetails.innerHTML = `
+      <form id="customerEditForm">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+          <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input type="text" id="editFirstName" class="form-input" value="${customer.firstName || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input type="text" id="editLastName" class="form-input" value="${customer.lastName || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" id="editPhoneRaw" class="form-input" value="${customer.phoneRaw || ''}" placeholder="(555) 123-4567" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="editEmail" class="form-input" value="${customer.email || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="editStatus" class="form-select">
+              <option value="lead" ${customer.status === 'lead' ? 'selected' : ''}>Lead</option>
+              <option value="quoted" ${customer.status === 'quoted' ? 'selected' : ''}>Quoted</option>
+              <option value="active" ${customer.status === 'active' ? 'selected' : ''}>Active</option>
+              <option value="lapsed" ${customer.status === 'lapsed' ? 'selected' : ''}>Lapsed</option>
+              <option value="closed" ${customer.status === 'closed' ? 'selected' : ''}>Closed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Source</label>
+            <input type="text" id="editSource" class="form-input" value="${customer.source || ''}" />
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">Address Street</label>
+            <input type="text" id="editAddressStreet" class="form-input" value="${address.street || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input type="text" id="editAddressCity" class="form-input" value="${address.city || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">State</label>
+            <input type="text" id="editAddressState" class="form-input" value="${address.state || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Zip</label>
+            <input type="text" id="editAddressZip" class="form-input" value="${address.zip || ''}" />
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label class="form-label">Notes</label>
+            <textarea id="editNotes" class="form-input" rows="3">${customer.notes || ''}</textarea>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+          <button type="button" class="btn" id="btnCancelEdit">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveEdit">Save Changes</button>
+        </div>
+      </form>
+    `;
+    
+    // Wire up form handlers
+    const form = document.getElementById('customerEditForm');
+    if (form) {
+      form.addEventListener('submit', handleSaveCustomer);
+    }
+    
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+    if (btnCancelEdit) {
+      btnCancelEdit.addEventListener('click', () => {
+        isEditMode = false;
+        loadOverview();
+        updateEditButtonState();
+      });
+    }
+  } else {
+    // View mode - show read-only info
+    const address = customer.address || {};
+    customerDetails.innerHTML = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Full Name</div>
+          <div>${customer.fullName || '—'}</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Phone</div>
+          <div>${customer.phoneE164 ? formatPhone(customer.phoneE164) : '—'}</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Email</div>
+          <div>${customer.email || '—'}</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Status</div>
+          <div><span class="badge badge-info">${customer.status || 'lead'}</span></div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Source</div>
+          <div>${customer.source || '—'}</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Created</div>
+          <div>${customer.createdAt ? formatDateTime(customer.createdAt) : '—'}</div>
+        </div>
+        ${address.street ? `
+        <div style="grid-column: 1 / -1;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Address</div>
+          <div>${address.street || ''}${address.city ? `, ${address.city}` : ''}${address.state ? `, ${address.state}` : ''}${address.zip ? ` ${address.zip}` : ''}</div>
+        </div>
+        ` : ''}
+        ${customer.notes ? `
+        <div style="grid-column: 1 / -1;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Notes</div>
+          <div>${customer.notes}</div>
+        </div>
+        ` : ''}
       </div>
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Phone</div>
-        <div>${customer.phoneE164 ? formatPhone(customer.phoneE164) : '—'}</div>
-      </div>
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Email</div>
-        <div>${customer.email || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Status</div>
-        <div><span class="badge badge-info">${customer.status || 'lead'}</span></div>
-      </div>
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Source</div>
-        <div>${customer.source || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Created</div>
-        <div>${customer.createdAt ? formatDateTime(customer.createdAt) : '—'}</div>
-      </div>
-    </div>
-  `;
+    `;
+  }
+}
+
+function handleEditClick() {
+  const role = userStore.role;
+  const canEdit = (role === 'admin' || role === 'agent');
+  
+  if (!canEdit) {
+    toast('You do not have permission to edit customers', 'error');
+    return;
+  }
+  
+  if (isEditMode) {
+    // Toggle back to view mode
+    isEditMode = false;
+    loadOverview();
+    const btnEdit = document.getElementById('btnEdit');
+    if (btnEdit) {
+      btnEdit.textContent = 'Edit';
+    }
+  } else {
+    // Enter edit mode
+    isEditMode = true;
+    loadOverview();
+    const btnEdit = document.getElementById('btnEdit');
+    if (btnEdit) {
+      btnEdit.textContent = 'Cancel';
+    }
+  }
+}
+
+async function handleSaveCustomer(e) {
+  e.preventDefault();
+  
+  const btnSaveEdit = document.getElementById('btnSaveEdit');
+  if (btnSaveEdit) {
+    btnSaveEdit.disabled = true;
+    btnSaveEdit.textContent = 'Saving...';
+  }
+  
+  try {
+    // Gather form data
+    const updates = {
+      firstName: document.getElementById('editFirstName')?.value.trim() || null,
+      lastName: document.getElementById('editLastName')?.value.trim() || null,
+      phoneRaw: document.getElementById('editPhoneRaw')?.value.trim() || null,
+      email: document.getElementById('editEmail')?.value.trim() || null,
+      status: document.getElementById('editStatus')?.value || 'lead',
+      source: document.getElementById('editSource')?.value.trim() || null,
+      notes: document.getElementById('editNotes')?.value.trim() || null,
+      address: {
+        street: document.getElementById('editAddressStreet')?.value.trim() || null,
+        city: document.getElementById('editAddressCity')?.value.trim() || null,
+        state: document.getElementById('editAddressState')?.value.trim() || null,
+        zip: document.getElementById('editAddressZip')?.value.trim() || null,
+      }
+    };
+    
+    console.log('[customer-page.js] Saving customer updates', {
+      customerId,
+      updates
+    });
+    
+    await updateCustomer(customerId, updates);
+    
+    // Reload customer data
+    await loadCustomer();
+    
+    // Exit edit mode
+    isEditMode = false;
+    loadOverview();
+    updateEditButtonState();
+    
+    const btnEdit = document.getElementById('btnEdit');
+    if (btnEdit) {
+      btnEdit.textContent = 'Edit';
+    }
+    
+    toast('Customer updated successfully', 'success');
+  } catch (error) {
+    console.error('[customer-page.js] Error saving customer:', error);
+    
+    let errorMsg = 'Failed to save customer';
+    if (error.code === 'permission-denied' || error.code === 'PERMISSION_DENIED') {
+      errorMsg = 'Permission denied. You may not have access to update customers.';
+    } else if (error.message) {
+      errorMsg = error.message;
+    }
+    
+    toast(errorMsg, 'error');
+    
+    if (btnSaveEdit) {
+      btnSaveEdit.disabled = false;
+      btnSaveEdit.textContent = 'Save Changes';
+    }
+  }
 }
 
 async function loadMessages() {
@@ -394,37 +622,141 @@ async function loadTasks() {
 }
 
 async function loadDocuments() {
+  const documentsList = document.getElementById('documentsList');
+  if (!documentsList) return;
+  
+  // Show loading state
+  documentsList.innerHTML = '<p class="empty-state">Loading documents...</p>';
+  
   try {
     const uploads = await listUploads(customerId);
-    
-    const documentsList = document.getElementById('documentsList');
-    if (!documentsList) return;
     
     if (uploads.length === 0) {
       documentsList.innerHTML = '<p class="empty-state">No documents uploaded</p>';
       return;
     }
     
-    documentsList.innerHTML = uploads.map(upload => `
-      <div class="list-item">
-        <div class="list-item-main">
-          <div class="list-item-title">${upload.fileName}</div>
-          <div class="list-item-subtitle">${upload.createdAt ? formatDateTime(upload.createdAt) : '—'}</div>
+    documentsList.innerHTML = uploads.map(upload => {
+      // Safely handle createdAt (could be Timestamp, Date, or missing)
+      let createdAtDisplay = '—';
+      if (upload.createdAt) {
+        try {
+          const createdAt = upload.createdAt?.toDate ? upload.createdAt.toDate() : new Date(upload.createdAt);
+          createdAtDisplay = formatDateTime(createdAt);
+        } catch (e) {
+          console.warn('[customer-page.js] Invalid createdAt for upload:', upload.id, e);
+        }
+      }
+      
+      return `
+        <div class="list-item">
+          <div class="list-item-main">
+            <div class="list-item-title">${upload.fileName || 'Unknown file'}</div>
+            <div class="list-item-subtitle">${createdAtDisplay}</div>
+          </div>
+          <a href="${upload.downloadURL || '#'}" target="_blank" class="btn btn-text">Download</a>
         </div>
-        <a href="${upload.downloadURL}" target="_blank" class="btn btn-text">Download</a>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (error) {
-    console.error('Error loading documents:', error);
-    toast('Failed to load documents', 'error');
+    console.error('[customer-page.js] Error loading documents:', error);
+    
+    // Show user-friendly error with retry option
+    let errorMessage = 'Failed to load documents';
+    if (error.code === 'failed-precondition' && error.message?.includes('index')) {
+      errorMessage = 'Database index is building. Please retry in a minute.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    documentsList.innerHTML = `
+      <div style="padding: 24px; text-align: center;">
+        <div style="color: var(--danger); margin-bottom: 16px;">⚠️ ${errorMessage}</div>
+        <button class="btn btn-primary" onclick="window.loadDocumentsRetry && window.loadDocumentsRetry()">Retry</button>
+      </div>
+    `;
+    
+    // Store retry function globally
+    window.loadDocumentsRetry = loadDocuments;
+    
+    // Only show toast for non-index errors (index errors already handled in listUploads)
+    if (!(error.code === 'failed-precondition' && error.message?.includes('index'))) {
+      toast(errorMessage, 'error');
+    }
   }
 }
 
 async function loadPolicies() {
-  // Placeholder - policies would be loaded from Firestore
-  const policiesList = document.getElementById('policiesList');
-  if (policiesList) {
-    policiesList.innerHTML = '<p class="empty-state">Policies feature coming soon</p>';
+  try {
+    if (!userStore.agencyId) {
+      const policiesList = document.getElementById('policiesList');
+      if (policiesList) {
+        policiesList.innerHTML = '<p class="empty-state">Agency ID not available</p>';
+      }
+      return;
+    }
+    
+    const policiesRef = collection(db, 'agencies', userStore.agencyId, 'customers', customerId, 'policies');
+    const q = query(policiesRef, orderBy('expirationDate', 'asc'));
+    const snapshot = await getDocs(q);
+    
+    const policies = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    console.log('[customer-page.js] Loaded policies', {
+      customerId,
+      count: policies.length
+    });
+    
+    const policiesList = document.getElementById('policiesList');
+    if (!policiesList) return;
+    
+    if (policies.length === 0) {
+      policiesList.innerHTML = '<p class="empty-state">No policies found</p>';
+      return;
+    }
+    
+    policiesList.innerHTML = `
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Policy Type</th>
+            <th>Insurance Company</th>
+            <th>Effective Date</th>
+            <th>Expiration Date</th>
+            <th>Premium</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${policies.map(policy => {
+            const effDate = policy.effectiveDate?.toDate ? policy.effectiveDate.toDate() : new Date(policy.effectiveDate);
+            const expDate = policy.expirationDate?.toDate ? policy.expirationDate.toDate() : new Date(policy.expirationDate);
+            const premium = policy.premium != null ? `$${policy.premium.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+            
+            return `
+              <tr>
+                <td>${policy.policyTypeNormalized || policy.rawPolicyType || '—'}</td>
+                <td>${policy.insuranceCompany || '—'}</td>
+                <td>${formatDateTime(effDate)}</td>
+                <td>${formatDateTime(expDate)}</td>
+                <td>${premium}</td>
+                <td><span class="badge badge-info">${policy.status || 'active'}</span></td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    console.error('[customer-page.js] Error loading policies:', error);
+    const policiesList = document.getElementById('policiesList');
+    if (policiesList) {
+      policiesList.innerHTML = `<p class="empty-state" style="color: var(--danger);">Failed to load policies: ${error.message}</p>`;
+    }
+    toast('Failed to load policies', 'error');
   }
 }
 
