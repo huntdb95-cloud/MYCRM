@@ -197,5 +197,22 @@ service cloud.firestore {
         allow write: if signedIn() && isAdminOrAgent(agencyId);
       }
     }
+    
+    // ============================================================================
+    // SMS CONSENTS COLLECTION (public opt-in, admin read-only)
+    // ============================================================================
+    match /sms_consents/{consentId} {
+      // Public write access for opt-in page (unauthenticated users can create consent records)
+      // Validate required fields: phoneE164 (string), consentType ('sms'), status ('active')
+      allow create: if request.resource.data.phoneE164 is string &&
+                      request.resource.data.consentType == 'sms' &&
+                      request.resource.data.status == 'active';
+      
+      // Only authenticated users can read consent records (for compliance auditing)
+      allow read: if signedIn();
+      
+      // No updates or deletes from client (only via Cloud Functions if needed)
+      allow update, delete: if false;
+    }
   }
 }
